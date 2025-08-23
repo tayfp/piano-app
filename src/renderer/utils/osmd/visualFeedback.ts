@@ -22,22 +22,20 @@ export interface VisualFeedback {
  */
 export function calculateVisualFeedback(velocity: number = 100): VisualFeedback {
   // Clamp and normalize velocity to 0-1 range
-  const normalizedVelocity = Math.max(0, Math.min(127, velocity)) / 127;
-  
+  const v = Math.max(0, Math.min(127, velocity)) / 127;
+
+  // Correct intent: yellow (60°) → orange (~30°) as velocity increases.
+  // Also make higher velocity slightly darker (50% → 40% lightness),
+  // while keeping opacity and stroke width intuitive.
+  const hue = 60 - v * 30;       // 60..30  (yellow → orange)
+  const lightness = 50 - v * 10; // 50..40  (slightly darker when louder)
+
   return {
     velocity,
-    // Color transitions from yellow (soft) to orange (loud)
-    // HSL: 60° (yellow) to 120° (light orange), full saturation
-    color: `hsl(${60 + normalizedVelocity * 60}, 100%, ${50 + normalizedVelocity * 20}%)`,
-    
-    // Stroke width increases with velocity (1-4 pixels)
-    strokeWidth: 1 + normalizedVelocity * 3,
-    
-    // Opacity ranges from 30% to 80%
-    opacity: 0.3 + normalizedVelocity * 0.5,
-    
-    // Glow intensity for special effects (0-10)
-    glowIntensity: normalizedVelocity * 10,
+    color: `hsl(${hue}, 100%, ${lightness}%)`,
+    strokeWidth: 1 + v * 3,      // 1..4 px
+    opacity: 0.3 + v * 0.5,      // 0.3..0.8
+    glowIntensity: v * 10,       // 0..10
   };
 }
 

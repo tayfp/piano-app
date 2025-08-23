@@ -35,7 +35,7 @@ export const isProduction = (): boolean => {
     return process.env.NODE_ENV === 'production';
   }
   
-  return true; // Default to production for safety
+  return false; // Default to false to avoid contradiction with isDevelopment
 };
 
 // Export constants for performance (evaluated once)

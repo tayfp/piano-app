@@ -53,87 +53,67 @@ export async function injectFingeringsIntoMusicXML(
       return musicXML; // Return original on error
     }
     
-    // 3. Find all notes in the score
-    const notes = xmlDoc.querySelectorAll('note');
+    // 3. Iterate by measure → notes (optimized: eliminates closest() calls)
+    const measures = xmlDoc.getElementsByTagName('measure');
     let injectedCount = 0;
-    let measureIndex = -1;
-    let staffIndex = 0;
-    let voiceIndex = 0;
-    let noteIndexInMeasure = 0;
-    
-    // Track current measure to update indices
-    let currentMeasure: Element | null = null;
-    
-    notes.forEach((note) => {
-      // Update measure tracking
-      const measure = note.closest('measure');
-      if (measure !== currentMeasure) {
-        currentMeasure = measure;
-        measureIndex++;
-        noteIndexInMeasure = 0;
-        
-        // Reset staff/voice for new measure
-        staffIndex = 0;
-        voiceIndex = 0;
-      } else {
-        noteIndexInMeasure++;
-      }
+    let totalNotesFound = 0;
+
+    for (let mi = 0; mi < measures.length; mi++) {
+      const measure = measures[mi];
+
+      // IMPORTANT: carry staff/voice across notes in a measure,
+      // matching current behavior exactly.
+      let staffIdx = 0;
+      let voiceIdx = 0;
+
+      const notes = measure.getElementsByTagName('note');
+      totalNotesFound += notes.length;
       
-      // Get staff number from note
-      const staffEl = note.querySelector('staff');
-      if (staffEl?.textContent) {
-        staffIndex = parseInt(staffEl.textContent) - 1; // MusicXML uses 1-based indexing
-      }
-      
-      // Get voice number from note
-      const voiceEl = note.querySelector('voice');
-      if (voiceEl?.textContent) {
-        voiceIndex = parseInt(voiceEl.textContent) - 1; // MusicXML uses 1-based indexing
-      }
-      
-      // Skip rests
-      const isRest = note.querySelector('rest') !== null;
-      if (isRest) return;
-      
-      // Get pitch information to calculate MIDI note
-      const pitch = note.querySelector('pitch');
-      if (!pitch) return;
-      
-      const step = pitch.querySelector('step')?.textContent;
-      const octave = pitch.querySelector('octave')?.textContent;
-      const alter = pitch.querySelector('alter')?.textContent;
-      
-      if (!step || !octave) return;
-      
-      // Calculate MIDI note number
-      const midiNote = calculateMidiFromPitch(step, parseInt(octave), alter ? parseInt(alter) : 0);
-      
-      // Build fingering ID to match our format: m{measure}-s{staff}-v{voice}-n{note}-midi{midi}
-      const fingeringId = `m${measureIndex}-s${staffIndex}-v${voiceIndex}-n${noteIndexInMeasure}-midi${midiNote}`;
-      
-      // Check if we have a fingering for this note
-      const finger = fingerings[fingeringId];
-      if (finger) {
-        // Check if technical element exists
-        let technical = note.querySelector('technical');
+      for (let ni = 0; ni < notes.length; ni++) {
+        const note = notes[ni];
+
+        // Update staff/voice first (even if this turns out to be a rest)
+        const staffText = note.getElementsByTagName('staff')[0]?.textContent;
+        if (staffText) staffIdx = parseInt(staffText, 10) - 1;
+
+        const voiceText = note.getElementsByTagName('voice')[0]?.textContent;
+        if (voiceText) voiceIdx = parseInt(voiceText, 10) - 1;
+
+        // Skip rests
+        if (note.getElementsByTagName('rest').length) continue;
+
+        const pitch = note.getElementsByTagName('pitch')[0];
+        if (!pitch) continue;
+        const step = pitch.getElementsByTagName('step')[0]?.textContent;
+        const octaveText = pitch.getElementsByTagName('octave')[0]?.textContent;
+        const alterText = pitch.getElementsByTagName('alter')[0]?.textContent;
+        if (!step || !octaveText) continue;
+
+        const midiNote = calculateMidiFromPitch(
+          step,
+          parseInt(octaveText, 10),
+          alterText ? parseInt(alterText, 10) : 0
+        );
+
+        // Build fingering ID to match our format: m{measure}-s{staff}-v{voice}-n{note}-midi{midi}
+        const fingeringId = `m${mi}-s${staffIdx}-v${voiceIdx}-n${ni}-midi${midiNote}`;
+
+        // Check if we have a fingering for this note
+        const finger = (fingerings as Record<string, number>)[fingeringId];
+        if (!finger) continue;
+
+        // Ensure <notations><technical><fingering>
+        let notations = note.getElementsByTagName('notations')[0];
+        if (!notations) {
+          notations = xmlDoc.createElement('notations');
+          note.appendChild(notations);
+        }
+        let technical = notations.getElementsByTagName('technical')[0];
         if (!technical) {
           technical = xmlDoc.createElement('technical');
-          // Insert after notations if it exists, otherwise at the end
-          const notations = note.querySelector('notations');
-          if (notations) {
-            notations.appendChild(technical);
-          } else {
-            // Create notations element
-            const notationsEl = xmlDoc.createElement('notations');
-            notationsEl.appendChild(technical);
-            note.appendChild(notationsEl);
-          }
+          notations.appendChild(technical);
         }
-        
-        // Check if fingering already exists (don't duplicate)
-        const existingFingering = technical.querySelector('fingering');
-        if (!existingFingering) {
-          // Add fingering element
+        if (!technical.getElementsByTagName('fingering')[0]) {
           const fingeringEl = xmlDoc.createElement('fingering');
           fingeringEl.textContent = String(finger);
           technical.appendChild(fingeringEl);
@@ -145,12 +125,12 @@ export async function injectFingeringsIntoMusicXML(
               finger,
               midiNote,
               step,
-              octave
+              octave: octaveText
             });
           }
         }
       }
-    });
+    }
     
     // 4. Serialize back to string
     const serializer = new XMLSerializer();
@@ -161,7 +141,7 @@ export async function injectFingeringsIntoMusicXML(
     if (process.env.NODE_ENV === 'development') {
       perfLogger.debug('MusicXML fingering injection complete', {
         fingeringsInDB: fingeringCount,
-        notesFound: notes.length,
+        notesFound: totalNotesFound,
         fingeringsInjected: injectedCount,
         processingTimeMs: totalTime.toFixed(2)
       });

@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from 'react';
 
 /**
  * Debounce hook that delays value updates by specified milliseconds.
- * Ensures proper timer cleanup to prevent memory leaks (Code review: 4.1 feedback).
+ * Ensures proper timer cleanup to prevent memory leaks.
  * 
  * @param value - The value to debounce
  * @param delay - Delay in milliseconds (e.g., 300ms for UI responsiveness)
@@ -10,35 +10,28 @@ import { useState, useEffect, useRef } from 'react';
  */
 export function useDebounce<T>(value: T, delay: number): T {
   const [debouncedValue, setDebouncedValue] = useState<T>(value);
-  const timerRef = useRef<NodeJS.Timeout>();
+  const timerRef = useRef<number | null>(null);
 
   useEffect(() => {
-    // Clear any existing timer (Code review: feedback on concurrent inputs)
-    if (timerRef.current) {
+    // Clear any existing timer
+    if (timerRef.current !== null) {
       clearTimeout(timerRef.current);
     }
 
-    // Set new timer
-    timerRef.current = setTimeout(() => {
+    // Set new timer (use window.setTimeout for DOM environment)
+    timerRef.current = window.setTimeout(() => {
       setDebouncedValue(value);
+      timerRef.current = null;
     }, delay);
 
     // Cleanup function
     return () => {
-      if (timerRef.current) {
+      if (timerRef.current !== null) {
         clearTimeout(timerRef.current);
+        timerRef.current = null;
       }
     };
   }, [value, delay]);
-
-  // Final cleanup on unmount
-  useEffect(() => {
-    return () => {
-      if (timerRef.current) {
-        clearTimeout(timerRef.current);
-      }
-    };
-  }, []);
 
   return debouncedValue;
 }

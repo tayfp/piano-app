@@ -22,7 +22,7 @@ export interface SpringConfig {
  * @param current - Current spring state
  * @param target - Target position
  * @param config - Spring configuration
- * @param dt - Delta time in seconds (capped at 0.016 for stability)
+ * @param dt - Delta time in seconds (integrated fully via substeps)
  * @returns New spring state
  */
 export function updateSpringPosition(
@@ -31,28 +31,33 @@ export function updateSpringPosition(
   config: SpringConfig,
   dt: number
 ): SpringState {
-  // Cap dt to prevent instability (60fps max)
-  const safeDt = Math.min(dt, 0.016);
-  
-  // Calculate forces
-  const displacement = target - current.position;
-  const springForce = displacement * config.stiffness;
-  const dampingForce = current.velocity * config.damping;
-  const acceleration = springForce - dampingForce;
-  
-  // Update velocity and position
-  const newVelocity = current.velocity + acceleration * safeDt;
-  const newPosition = current.position + newVelocity * safeDt;
-  
-  // Snap to target if very close (prevents oscillation)
-  if (Math.abs(displacement) < 0.01 && Math.abs(newVelocity) < 0.1) {
+  // Integrate the FULL elapsed time using a small number of equal substeps.
+  // - No time is lost (no slow-motion after hitches)
+  // - Usually n=1; hitch frames do n=2..3 tiny iterations
+  // - Semi-implicit Euler: stable and cheap
+  const MAX_STEP = 0.016;       // 16ms (60 FPS)
+  const MAX_FRAME = 0.25;       // safety cap
+  const mass = (config as any).mass ?? 1;
+
+  let position = current.position;
+  let velocity = current.velocity;
+
+  const clampedDt = Math.min(dt, MAX_FRAME);
+  const n = Math.max(1, Math.ceil(clampedDt / MAX_STEP));
+  const h = clampedDt / n;
+
+  for (let i = 0; i < n; i++) {
+    const displacement = target - position;
+    const acceleration = (config.stiffness * displacement - config.damping * velocity) / mass;
+    velocity = velocity + acceleration * h; // update v first (semi-implicit)
+    position = position + velocity * h;     // then x with new v
+  }
+
+  // Snap when effectively settled to avoid tiny oscillations
+  if (Math.abs(target - position) < 0.01 && Math.abs(velocity) < 0.1) {
     return { position: target, velocity: 0 };
   }
-  
-  return { 
-    position: newPosition, 
-    velocity: newVelocity 
-  };
+  return { position, velocity };
 }
 
 /**

@@ -49,6 +49,277 @@ if (process.env.NODE_ENV === 'development') {
   debug('useOSMD.ts loaded', { timestamp: new Date().toISOString(), buildVersion: Math.random() });
 }
 
+// =========================================================================
+// RESIZE CASCADE FIX - SURGICAL UTILITIES
+// =========================================================================
+// AUTHORITATIVE FIX: Single ResizeObserver with width-only gating (ChatGPT-5)
+// Eliminates resize cascade by focusing on layout-driving changes only
+
+// Module-scoped single observer - no dual system confusion
+let resizeObserverSingle: ResizeObserver | null = null;
+let lastWidth = -1;  // Only track width - height is consequence, not driver
+let resizePaused = false;
+
+// Singleflight scheduler - prevent render storms (latest-wins pattern)
+let rendering = false;
+let rerun = false;
+
+function scheduleResize(run: () => Promise<void>) {
+  if (rendering) { 
+    rerun = true; 
+    return; 
+  }
+  rendering = true;
+  requestAnimationFrame(async () => {
+    await run();            // Perform the resize operation
+    rendering = false;
+    if (rerun) { 
+      rerun = false; 
+      scheduleResize(run);  // Run one more if needed
+    }
+  });
+}
+
+// Single observer with width-only gating - the conceptual breakthrough
+function setupResizeObserverOnce(target: Element, run: () => Promise<void>) {
+  if (resizeObserverSingle) resizeObserverSingle.disconnect();
+  
+  resizeObserverSingle = new ResizeObserver((entries) => {
+    if (resizePaused || !entries.length) return;
+    
+    // WIDTH-ONLY GATING: Music layout depends on available width
+    // Height increases are a RESULT of our content - don't feed them back
+    const w = Math.round(entries[0].contentRect.width);
+    if (w === lastWidth) return;  // Ignore height-only changes entirely
+    lastWidth = w;
+    
+    scheduleResize(run);  // Singleflight prevents storms
+  });
+  
+  resizeObserverSingle.observe(target);
+}
+
+// Clean observer (single system)
+function cleanupResizeObserver() {
+  if (resizeObserverSingle) { 
+    try { resizeObserverSingle.disconnect(); } catch {} 
+    resizeObserverSingle = null; 
+  }
+  rendering = false;  // Reset render state
+  rerun = false;
+}
+
+// Pause ResizeObserver during DOM mutations (keep this working pattern)
+function withResizeObserverPaused<T>(fn: () => T): T {
+  const wasResizePaused = resizePaused;
+  resizePaused = true;
+  try { 
+    return fn(); 
+  } finally { 
+    resizePaused = wasResizePaused; 
+  }
+}
+
+// Main resize function with idempotent zoom and overlay pattern
+async function performResize(
+  osmdRef: React.MutableRefObject<any>,
+  containerRef: React.MutableRefObject<HTMLDivElement | null>,
+  zoomLevel: number,
+  buildMeasureCache: () => void,
+  injectNoteIdAttributes: () => void,
+  drawPracticeRangeBorder: () => void,
+  isReady: boolean
+) {
+  const osmd = osmdRef.current;
+  const container = containerRef.current;
+  if (!osmd || !container || !isReady) return;
+
+  const rect = container.getBoundingClientRect();
+  if (!rect.width || rect.width <= 0) return;
+
+  // Idempotent zoom (avoid re-applying the same value)
+  const targetZoom = Number(zoomLevel.toFixed(3));
+  if (Math.abs(osmd.zoom - targetZoom) > 0.001) {
+    osmd.zoom = targetZoom;
+  }
+
+  // Render OSMD with new dimensions
+  osmd.render();
+
+  // Pause observer while mutating (no bounce)
+  await new Promise<void>((resolve) => {
+    requestAnimationFrame(() => {
+      withResizeObserverPaused(() => {
+        buildMeasureCache();        // reads
+        injectNoteIdAttributes();   // reads (ok)
+        drawPracticeRangeBorder();  // overlay writes (no layout impact)
+      });
+      resolve();
+    });
+  });
+}
+
+// =========================================================================
+// PRACTICE BORDER OVERLAY SYSTEM (LAYOUT-NEUTRAL)
+// =========================================================================
+// ChatGPT-5 solution: Draw borders in absolutely-positioned overlay
+// Benefits: No SVG appendChild to main content = No height changes = No resize cascade
+
+// Create or get the overlay container (absolutely positioned, no layout impact)
+function ensurePracticeBorderOverlay(containerEl: HTMLElement): HTMLDivElement {
+  let overlay = containerEl.querySelector<HTMLDivElement>('.osmd-practice-border-overlay');
+  if (!overlay) {
+    overlay = document.createElement('div');
+    overlay.className = 'osmd-practice-border-overlay';
+    Object.assign(overlay.style, {
+      position: 'absolute',
+      inset: '0',              // top:0 right:0 bottom:0 left:0
+      pointerEvents: 'none',   // no hit-testing (clicks pass through)
+      overflow: 'hidden',      // clip any overflow
+      zIndex: '10',           // above OSMD content but below UI
+    });
+    containerEl.appendChild(overlay);
+  }
+  return overlay;
+}
+
+// Create or get the overlay SVG (scales with container, no layout impact)
+function ensurePracticeBorderSvg(overlay: HTMLElement): SVGSVGElement {
+  const ns = 'http://www.w3.org/2000/svg';
+  let svg = overlay.querySelector<SVGSVGElement>('svg');
+  if (!svg) {
+    svg = document.createElementNS(ns, 'svg');
+    svg.setAttribute('width', '100%');
+    svg.setAttribute('height', '100%');
+    svg.setAttribute('preserveAspectRatio', 'xMinYMin slice');
+    svg.style.display = 'block';
+    overlay.appendChild(svg);
+  }
+  return svg;
+}
+
+// Clear all practice border overlays from container
+function clearPracticeBorderOverlays(containerEl: HTMLElement) {
+  const overlays = containerEl.querySelectorAll('.osmd-practice-border-overlay');
+  overlays.forEach(overlay => overlay.remove());
+}
+
+// =========================================================================
+// ULTRA-DEEP RESIZE DEBUG LOGGING SYSTEM
+// =========================================================================
+// Filterable debug prefix for resize analysis
+const RESIZE_DEBUG_PREFIX = 'OSMD_RESIZE_DEBUG';
+let debugSequenceCounter = 0;
+const debugStartTime = performance.now();
+
+// Comprehensive resize debug logger
+const resizeDebugLog = (operation: string, data: any = {}, timing: { start?: number; end?: number } = {}) => {
+  if (!DEV) return;
+  
+  const sequence = ++debugSequenceCounter;
+  const timestamp = performance.now();
+  const elapsed = timestamp - debugStartTime;
+  const duration = timing.start && timing.end ? timing.end - timing.start : undefined;
+  
+  // Get container dimensions with full precision
+  let containerDimensions = 'N/A';
+  try {
+    const container = document.querySelector('[data-osmd-container]') as HTMLElement;
+    if (container) {
+      const rect = container.getBoundingClientRect();
+      containerDimensions = `${rect.width.toFixed(6)}x${rect.height.toFixed(6)}`;
+    }
+  } catch (e) {
+    containerDimensions = 'ERROR';
+  }
+  
+  // Create detailed log entry
+  const logData = {
+    seq: sequence,
+    timestamp: timestamp.toFixed(3),
+    elapsed: elapsed.toFixed(3),
+    operation,
+    container: containerDimensions,
+    duration: duration?.toFixed(3),
+    ...data
+  };
+  
+  console.log(`${RESIZE_DEBUG_PREFIX}[${sequence.toString().padStart(3, '0')}] ${operation}`, logData);
+};
+
+// Performance timer utility
+const createTimer = () => {
+  const start = performance.now();
+  return {
+    start,
+    end: () => performance.now(),
+    elapsed: () => performance.now() - start
+  };
+};
+
+// Dimension change detector
+let lastKnownDimensions = { width: 0, height: 0 };
+const trackDimensionChange = (source: string, element?: Element) => {
+  try {
+    const target = element || document.querySelector('[data-osmd-container]') as HTMLElement;
+    if (!target) return;
+    
+    const rect = target.getBoundingClientRect();
+    const current = { width: rect.width, height: rect.height };
+    const widthDelta = current.width - lastKnownDimensions.width;
+    const heightDelta = current.height - lastKnownDimensions.height;
+    
+    if (widthDelta !== 0 || heightDelta !== 0) {
+      resizeDebugLog(`DIMENSION_CHANGE`, {
+        source,
+        previous: `${lastKnownDimensions.width.toFixed(6)}x${lastKnownDimensions.height.toFixed(6)}`,
+        current: `${current.width.toFixed(6)}x${current.height.toFixed(6)}`,
+        delta: `${widthDelta.toFixed(6)}x${heightDelta.toFixed(6)}`,
+        element: target.tagName + (target.className ? `.${target.className}` : '')
+      });
+      lastKnownDimensions = current;
+    }
+  } catch (e) {
+    resizeDebugLog(`DIMENSION_ERROR`, { source, error: e.message });
+  }
+};
+
+// SVG element tracking
+const trackSVGModification = (operation: string, details: any = {}) => {
+  if (!DEV) return;
+  
+  try {
+    const svg = document.querySelector('svg');
+    const svgDimensions = svg ? {
+      viewBox: svg.getAttribute('viewBox'),
+      width: svg.getAttribute('width'),
+      height: svg.getAttribute('height'),
+      clientWidth: svg.clientWidth,
+      clientHeight: svg.clientHeight,
+      childElementCount: svg.childElementCount
+    } : null;
+    
+    resizeDebugLog(`SVG_MODIFICATION`, {
+      operation,
+      svg: svgDimensions,
+      ...details
+    });
+  } catch (e) {
+    resizeDebugLog(`SVG_ERROR`, { operation, error: e.message });
+  }
+};
+
+// Call stack tracer (simplified)
+const getCallStack = () => {
+  try {
+    const stack = new Error().stack;
+    const lines = stack?.split('\n').slice(2, 6); // Skip Error and current function
+    return lines?.map(line => line.trim().replace(/.*\//, '')) || [];
+  } catch {
+    return ['stack_unavailable'];
+  }
+};
+
 // Performance monitoring (following existing PianoKeyboard patterns)
 const PERFORMANCE_CONFIG = {
   HIGHLIGHT_DEBOUNCE_MS: 16, // ~60fps for smooth updates
@@ -125,7 +396,6 @@ export const useOSMD = (
     midiToTimestamp: new Map(),
     graphicalNoteMap: new Map()
   });
-  const resizeObserverRef = useRef<ResizeObserver | null>(null);
   const resizeTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const noteMappingBuiltRef = useRef(false); // Track if mapping built for current score
   
@@ -151,6 +421,7 @@ export const useOSMD = (
     const graphicalNoteMap = noteMappingRef.current.graphicalNoteMap;
     if (!graphicalNoteMap || graphicalNoteMap.size === 0) return;
     
+    trackDimensionChange('before_inject_note_ids_layout_queries');
     
     let injected = 0;
     let chordCount = 0;
@@ -171,10 +442,10 @@ export const useOSMD = (
             // CHORD: Inject ID on individual notehead
             chordCount++;
             
-            // Sort noteheads by Y position and reverse to match MIDI order
+            // Sort noteheads by Y position - WARNING: getBoundingClientRect() can trigger layout!
             const sortedNoteheads = Array.from(noteheadElements).sort((a, b) => {
-              const aRect = a.getBoundingClientRect();
-              const bRect = b.getBoundingClientRect();
+              const aRect = a.getBoundingClientRect(); // SUSPECT: Layout trigger
+              const bRect = b.getBoundingClientRect(); // SUSPECT: Layout trigger  
               return aRect.top - bRect.top;
             }).reverse();
             
@@ -198,9 +469,11 @@ export const useOSMD = (
           injected++;
         }
       } catch (error) {
+        // Ignore errors
       }
     }
     
+    trackDimensionChange('after_inject_note_ids_layout_queries');
     
     if (process.env.NODE_ENV === 'development') {
       debug('Re-injected data-note-id attributes', { injected, total: graphicalNoteMap.size });
@@ -247,12 +520,14 @@ export const useOSMD = (
           scrollContainer.scrollTop = scrollPercent * scrollContainer.scrollHeight;
         }
         
-        // Build cache after render completes
-        buildMeasureCache();
-        
-        // Re-inject note attributes after render
-        injectNoteIdAttributes();
-        drawPracticeRangeBorder();
+        // Build cache after render completes - with ResizeObserver pause
+        withResizeObserverPaused(() => {
+          buildMeasureCache();
+          
+          // Re-inject note attributes after render
+          injectNoteIdAttributes();
+          drawPracticeRangeBorder();
+        });
       });
       
       // Performance monitoring
@@ -1153,7 +1428,6 @@ export const useOSMD = (
       graphic.MeasureList;
 
     if (!graphicalMeasures) {
-      console.warn('[Practice Range Cache] No GraphicalMeasureParents found');
       return;
     }
 
@@ -1253,57 +1527,50 @@ export const useOSMD = (
     }
   }, []);
 
-  // Draw practice range border on SVG
-  const drawPracticeRangeBorder = useCallback(() => {
-    const osmdInstance = osmdRef.current;
-    if (!osmdInstance) return;
+  // Draw practice range border in layout-neutral overlay (ChatGPT-5 fix)
+  const drawPracticeRangeBorder = useCallback((opts?: { color?: string; strokeWidth?: number }) => {
+    const { color = '#ff0000', strokeWidth = 3 } = opts || {};
     
-    // Check if custom range is active (allow preview even outside practice mode)
+    const osmdInstance = osmdRef.current;
+    const containerEl = containerRef.current;
+    if (!osmdInstance || !containerEl) return;
+    
+    // Check if custom range is active
     const practiceState = usePracticeStore.getState();
     if (!practiceState.customRangeActive) return;
 
-    // Get the SVG backend
-    const backend = osmdInstance.drawer?.Backends?.[0];
-    if (!backend || typeof backend.getSvgElement !== 'function') return;
-    
-    const svg = backend.getSvgElement() as SVGSVGElement;
-    
-
-    // Remove existing borders
-    svg.querySelectorAll('.practice-range-border').forEach(el => el.remove());
-    svg.querySelectorAll('.practice-range-test').forEach(el => el.remove());
-
     // Get practice range state
-    const { customRangeActive, customStartMeasure, customEndMeasure } = usePracticeStore.getState();
+    const { customRangeActive, customStartMeasure, customEndMeasure } = practiceState;
     
     if (!customRangeActive || !customStartMeasure || !customEndMeasure || customStartMeasure > customEndMeasure) {
       return;
     }
 
-    const graphicSheet = osmdInstance.GraphicSheet;
-    if (!graphicSheet) return;
-    
     // Check if cache is built
     if (!cacheBuiltRef.current || measureCacheRef.current.size === 0) {
-      console.error('[Practice Range] Measure cache not built - cannot draw practice range');
+      if (process.env.NODE_ENV === 'development') {
+        console.warn('[Practice Range] Measure cache not built - cannot draw practice range');
+      }
       return;
     }
 
-    // When appending to the transformed group, we don't need to multiply by zoom
-    // as the group's transform handles it
-    const minVisibleWidth = 8; // Minimum width in OSMD units (80px at 100% zoom)
+    // ===== OVERLAY RENDERING (NO LAYOUT IMPACT) =====
+    // Get or create the absolutely-positioned overlay
+    const overlay = ensurePracticeBorderOverlay(containerEl);
+    const overlaySvg = ensurePracticeBorderSvg(overlay);
     
+    // Clear previous overlay content
+    while (overlaySvg.firstChild) {
+      overlaySvg.removeChild(overlaySvg.firstChild);
+    }
+
     // Group selected measures by system using cache
     const measuresBySystem = new Map<number, Array<{ x: number; y: number; width: number; height: number }>>();
+    const minVisibleWidth = 8; // Minimum width in OSMD units
     
     for (let m = customStartMeasure; m <= customEndMeasure; m++) {
       const bboxes = measureCacheRef.current.get(m);
-      if (!bboxes) {
-        if (process.env.NODE_ENV === 'development') {
-          console.warn(`[Practice Range] Measure ${m} not found in cache`);
-        }
-        continue;
-      }
+      if (!bboxes) continue;
       
       for (const bbox of bboxes) {
         if (!measuresBySystem.has(bbox.systemIndex)) {
@@ -1313,39 +1580,28 @@ export const useOSMD = (
       }
     }
 
-    if (measuresBySystem.size === 0) {
-      console.warn('[Practice Range] No measures found in selected range');
-      return;
-    }
+    if (measuresBySystem.size === 0) return;
 
-    // Find the OSMD canvas group that contains transforms
-    // This ensures our rectangles inherit the same zoom scaling as the music notation
-    let contentGroup = svg.querySelector('#osmdCanvas') || svg.querySelector('g#osmdCanvas');
-    if (!contentGroup) {
-      // Fallback: look for any g element with scale transform
-      const allGroups = svg.querySelectorAll('g');
-      for (const g of allGroups) {
-        const transform = g.getAttribute('transform');
-        if (transform && transform.includes('scale')) {
-          contentGroup = g;
-          break;
-        }
-      }
-    }
-    if (!contentGroup) {
-      contentGroup = svg.querySelector('g') || svg; // Final fallback
-    }
-
-    if (process.env.NODE_ENV === 'development') {
-      const transform = contentGroup.getAttribute('transform');
-      dlog('[Practice Range] Using content group:', contentGroup.id || contentGroup.tagName, 'transform:', transform);
-    }
-
-    const fragment = document.createDocumentFragment();
-    // Scale padding with zoom to maintain consistent visual spacing
+    // Get OSMD SVG for coordinate calculations
+    const backend = osmdInstance.drawer?.Backends?.[0];
+    if (!backend || typeof backend.getSvgElement !== 'function') return;
+    
+    const osmdSvg = backend.getSvgElement() as SVGSVGElement;
+    const osmdRect = osmdSvg.getBoundingClientRect();
+    const containerRect = containerEl.getBoundingClientRect();
+    
+    // Calculate offset between OSMD SVG and container
+    const offsetX = osmdRect.left - containerRect.left + containerEl.scrollLeft;
+    const offsetY = osmdRect.top - containerRect.top + containerEl.scrollTop;
+    
+    // Get current zoom for scaling
+    const currentZoom = osmdInstance.zoom || 1;
     const paddingInOSMDUnits = 0.4; // 4px at 100% zoom
+    
+    // Create SVG namespace
+    const ns = 'http://www.w3.org/2000/svg';
 
-    // Draw a rectangle for each system
+    // Draw rectangles in overlay (absolutely positioned, no layout impact)
     measuresBySystem.forEach((bboxes, systemIndex) => {
       if (bboxes.length === 0) return;
       
@@ -1355,7 +1611,7 @@ export const useOSMD = (
       const firstBox = bboxes[0];
       const lastBox = bboxes[bboxes.length - 1];
       
-      // Calculate union bounds
+      // Calculate union bounds in OSMD coordinates
       const x = firstBox.x;
       const y = Math.min(...bboxes.map(b => b.y));
       const maxX = lastBox.x + lastBox.width;
@@ -1367,51 +1623,80 @@ export const useOSMD = (
       // Apply minimum width if needed
       if (width < minVisibleWidth) {
         width = minVisibleWidth;
-        if (process.env.NODE_ENV === 'development') {
-          dlog(`[Practice Range] System ${systemIndex}: Width extended to minimum for visibility`);
-        }
       }
 
       // Guard against invalid dimensions
       if (width <= 0 || height <= 0) return;
 
-      // Create SVG rect - when appended to the correct group, transforms are inherited
-      const rect = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
-      // Since we're in the transformed group, we only multiply by 10 (OSMD's base unit)
-      // The zoom scaling is handled by the group's transform attribute
-      rect.setAttribute('x', ((x - paddingInOSMDUnits) * 10).toString());
-      rect.setAttribute('y', ((y - paddingInOSMDUnits) * 10).toString());
-      rect.setAttribute('width', ((width + 2 * paddingInOSMDUnits) * 10).toString());
-      rect.setAttribute('height', ((height + 2 * paddingInOSMDUnits) * 10).toString());
+      // Convert OSMD coordinates to overlay coordinates
+      const overlayX = offsetX + (x - paddingInOSMDUnits) * 10 * currentZoom;
+      const overlayY = offsetY + (y - paddingInOSMDUnits) * 10 * currentZoom;
+      const overlayWidth = (width + 2 * paddingInOSMDUnits) * 10 * currentZoom;
+      const overlayHeight = (height + 2 * paddingInOSMDUnits) * 10 * currentZoom;
+
+      // Create rectangle in overlay (no layout impact!)
+      const rect = document.createElementNS(ns, 'rect');
       rect.setAttribute('class', 'practice-range-border');
-      rect.style.fill = 'none';
-      rect.style.stroke = '#ff0000'; // Red border
-      // Scale stroke width inversely with zoom to maintain visual consistency
-      rect.style.strokeWidth = (3 / (osmdInstance.zoom || 1)).toString();
+      rect.setAttribute('x', overlayX.toString());
+      rect.setAttribute('y', overlayY.toString());
+      rect.setAttribute('width', overlayWidth.toString());
+      rect.setAttribute('height', overlayHeight.toString());
+      rect.setAttribute('fill', 'none');
+      rect.setAttribute('stroke', color);
+      rect.setAttribute('stroke-width', (strokeWidth / currentZoom).toString()); // Scale with zoom
+      rect.setAttribute('vector-effect', 'non-scaling-stroke'); // Stable stroke under zoom
       rect.style.pointerEvents = 'none';
-      rect.style.zIndex = '1000';
-      
-      fragment.appendChild(rect);
+
+      // Append to overlay SVG (NOT to OSMD content!)
+      overlaySvg.appendChild(rect);
     });
 
-    // Append all rectangles to content group
-    if (contentGroup instanceof SVGElement) {
-      contentGroup.appendChild(fragment);
-    } else {
-      svg.appendChild(fragment);
+    if (process.env.NODE_ENV === 'development') {
+      dlog(`[Practice Range Overlay] Drew ${measuresBySystem.size} system borders in overlay`);
     }
   }, [osmdRef, buildMeasureCache]);
 
   // Handle resize with debouncing and scroll preservation
   const handleResize = useCallback(() => {
-    if (!osmdRef.current || !isReady || !containerRef.current) return;
+    const timer = createTimer();
+    const callStack = getCallStack();
+    
+    resizeDebugLog('HANDLE_RESIZE_START', {
+      isReady,
+      hasOsmd: !!osmdRef.current,
+      hasContainer: !!containerRef.current,
+      callStack: callStack.slice(0, 3)
+    });
+
+    if (!osmdRef.current || !isReady || !containerRef.current) {
+      resizeDebugLog('HANDLE_RESIZE_ABORT', { 
+        reason: !osmdRef.current ? 'no_osmd' : !isReady ? 'not_ready' : 'no_container'
+      });
+      return;
+    }
+
+    // Track dimension before clearing timeout
+    trackDimensionChange('before_resize_timeout');
 
     // Clear any pending resize
     if (resizeTimeoutRef.current) {
+      resizeDebugLog('RESIZE_TIMEOUT_CLEARED', { 
+        previousTimeoutActive: true 
+      });
       clearTimeout(resizeTimeoutRef.current);
     }
 
+    resizeDebugLog('RESIZE_TIMEOUT_SCHEDULED', { 
+      delay: '16ms',
+      queuedAt: timer.elapsed().toFixed(3)
+    });
+
     resizeTimeoutRef.current = setTimeout(() => {
+      const timeoutTimer = createTimer();
+      resizeDebugLog('RESIZE_TIMEOUT_EXECUTING', {
+        delayedBy: timer.elapsed().toFixed(3)
+      });
+
       try {
         // Save scroll position from parent section (new architecture)
         const parentSection = containerRef.current?.parentElement;
@@ -1419,27 +1704,120 @@ export const useOSMD = (
           ? parentSection.scrollTop / parentSection.scrollHeight
           : 0;
 
+        resizeDebugLog('SCROLL_POSITION_CAPTURED', {
+          hasParentSection: !!parentSection,
+          scrollPercent: scrollPercent.toFixed(6),
+          scrollTop: parentSection?.scrollTop || 0,
+          scrollHeight: parentSection?.scrollHeight || 0
+        });
+
         // Check dimensions before re-render
         const rect = containerRef.current?.getBoundingClientRect();
+        trackDimensionChange('before_osmd_render');
+        
+        resizeDebugLog('PRE_RENDER_DIMENSIONS', {
+          container: `${rect?.width.toFixed(6)}x${rect?.height.toFixed(6)}`,
+          osmdZoom: osmdRef.current?.zoom || 'unknown',
+          containerElement: containerRef.current?.tagName + (containerRef.current?.className ? `.${containerRef.current.className}` : '')
+        });
+        
         if (process.env.NODE_ENV === 'development') {
           debug(`OSMD resize triggered. Container: ${rect?.width}x${rect?.height}`);
         }
 
         // Re-render OSMD with new dimensions and current zoom
         if (rect && rect.width > 0) {
+          const renderTimer = createTimer();
+          
           // Apply current zoom level before render
           if (osmdRef.current) {
+            const previousZoom = osmdRef.current.zoom;
             osmdRef.current.zoom = zoomLevel;
+            
+            resizeDebugLog('ZOOM_APPLIED', {
+              previousZoom: previousZoom.toFixed(3),
+              newZoom: zoomLevel.toFixed(3),
+              zoomChanged: Math.abs(previousZoom - zoomLevel) > 0.001
+            });
           }
+          
+          resizeDebugLog('OSMD_RENDER_START', {
+            containerWidth: rect.width.toFixed(6),
+            containerHeight: rect.height.toFixed(6),
+            zoom: zoomLevel.toFixed(3)
+          });
+          
+          trackDimensionChange('before_osmd_render_call');
+          trackSVGModification('before_osmd_render');
+          
           osmdRef.current?.render();
+          
+          const renderTime = renderTimer.elapsed();
+          trackDimensionChange('after_osmd_render_call');
+          trackSVGModification('after_osmd_render');
+          
+          resizeDebugLog('OSMD_RENDER_COMPLETE', {
+            renderTime: renderTime.toFixed(3)
+          });
           
           // Re-inject data-note-id attributes after OSMD re-render
           // Use requestAnimationFrame to ensure DOM is fully updated
+          resizeDebugLog('POST_RENDER_RAF_SCHEDULED', {
+            scheduledAt: renderTimer.elapsed().toFixed(3)
+          });
+          
           requestAnimationFrame(() => {
-            // Rebuild cache after re-render
-            buildMeasureCache();
-            injectNoteIdAttributes();
-            drawPracticeRangeBorder();
+            const rafTimer = createTimer();
+            
+            // SCOPING FIX: Declare timing variables at RAF scope level
+            let cacheTime: number;
+            let injectTime: number; 
+            let borderTime: number;
+            
+            resizeDebugLog('POST_RENDER_RAF_EXECUTING', {
+              totalDelay: renderTimer.elapsed().toFixed(3)
+            });
+            
+            trackDimensionChange('post_render_raf_start');
+            
+            // ===== CRITICAL FIX: Pause ResizeObserver during DOM mutations =====
+            withResizeObserverPaused(() => {
+              // Rebuild cache after re-render
+              const cacheTimer = createTimer();
+              buildMeasureCache();
+              cacheTime = cacheTimer.elapsed(); // Assignment instead of declaration
+              trackDimensionChange('after_build_cache');
+              resizeDebugLog('BUILD_CACHE_COMPLETE', {
+                duration: cacheTime.toFixed(3)
+              });
+              
+              // Inject note IDs
+              const injectTimer = createTimer(); 
+              injectNoteIdAttributes();
+              injectTime = injectTimer.elapsed(); // Assignment instead of declaration
+              trackDimensionChange('after_inject_note_ids');
+              resizeDebugLog('INJECT_NOTE_IDS_COMPLETE', {
+                duration: injectTime.toFixed(3)
+              });
+              
+              // Draw practice range border (now uses layout-neutral overlay)
+              const borderTimer = createTimer();
+              drawPracticeRangeBorder();
+              borderTime = borderTimer.elapsed(); // Assignment instead of declaration
+              trackDimensionChange('after_draw_border');
+              trackSVGModification('after_draw_border');
+              resizeDebugLog('DRAW_BORDER_COMPLETE', {
+                duration: borderTime.toFixed(3)
+              });
+            });
+            // ===== END ResizeObserver PAUSE - Mutations complete =====
+            
+            resizeDebugLog('POST_RENDER_RAF_COMPLETE', {
+              totalRafTime: rafTimer.elapsed().toFixed(3),
+              cacheTime: cacheTime.toFixed(3),
+              injectTime: injectTime.toFixed(3), 
+              borderTime: borderTime.toFixed(3)
+            });
           });
           
           // Note: We no longer rebuild note mappings on resize
@@ -1484,45 +1862,84 @@ export const useOSMD = (
 
           // Restore scroll position in parent section after next paint
           requestAnimationFrame(() => {
+            resizeDebugLog('SCROLL_RESTORE_RAF', {
+              hasParentSection: !!parentSection,
+              scrollPercent: scrollPercent.toFixed(6),
+              willRestoreScroll: !!(parentSection && scrollPercent > 0)
+            });
+            
             if (parentSection && scrollPercent > 0) {
+              const previousScrollTop = parentSection.scrollTop;
               parentSection.scrollTop = scrollPercent * parentSection.scrollHeight;
+              const newScrollTop = parentSection.scrollTop;
+              
+              resizeDebugLog('SCROLL_RESTORED', {
+                previousScrollTop,
+                newScrollTop,
+                scrollHeight: parentSection.scrollHeight,
+                scrollChanged: Math.abs(newScrollTop - previousScrollTop) > 1
+              });
             }
+          });
+
+          trackDimensionChange('resize_operation_complete');
+          resizeDebugLog('RESIZE_OPERATION_SUCCESS', {
+            totalTime: timeoutTimer.elapsed().toFixed(3)
           });
 
           if (process.env.NODE_ENV === 'development') {
             debug(' OSMD resized and re-rendered successfully');
           }
+        } else {
+          resizeDebugLog('RESIZE_SKIPPED', {
+            reason: 'invalid_dimensions',
+            rectWidth: rect?.width || 'undefined',
+            rectHeight: rect?.height || 'undefined'
+          });
         }
       } catch (error) {
+        resizeDebugLog('RESIZE_ERROR', {
+          error: error.message || String(error),
+          totalTime: timeoutTimer.elapsed().toFixed(3)
+        });
         perfLogger.error(' Resize render failed:', error instanceof Error ? error : new Error(String(error)));
       }
     }, 16); // One frame delay (16ms) for instant resize at 60fps
   }, [isReady, autoShowCursor, injectNoteIdAttributes, zoomLevel]);
 
-  // Setup ResizeObserver for responsive behavior
+  // Create performResize function bound to current component state
+  const createPerformResize = useCallback((): (() => Promise<void>) => {
+    return () => performResize(
+      osmdRef,
+      containerRef,
+      zoomLevel,
+      buildMeasureCache,
+      injectNoteIdAttributes,
+      drawPracticeRangeBorder,
+      isReady
+    );
+  }, [zoomLevel, buildMeasureCache, injectNoteIdAttributes, drawPracticeRangeBorder, isReady]);
+
+  // Setup single ResizeObserver (ChatGPT-5 authoritative fix)
   const setupResizeObserver = useCallback(() => {
-    if (!containerRef.current || !osmdRef.current) return;
-
-    // Clean up any existing observer
-    if (resizeObserverRef.current) {
-      resizeObserverRef.current.disconnect();
+    if (!containerRef.current || !osmdRef.current || !isReady) {
+      return;
     }
 
-    // Create new observer
-    resizeObserverRef.current = new ResizeObserver((entries) => {
-      if (entries.length > 0 && entries[0].contentRect.width > 0) {
-        handleResize();
-      }
-    });
-
-    // Observe the parent container that actually changes size
+    // Observe the parent container (scrollable wrapper) that actually changes size
     const observeTarget = containerRef.current.parentElement || containerRef.current;
-    resizeObserverRef.current.observe(observeTarget);
-
+    
     if (process.env.NODE_ENV === 'development') {
-      debug(' ResizeObserver setup for responsive sheet music');
+      const targetRect = observeTarget.getBoundingClientRect();
+      debug('Setting up SINGLE ResizeObserver with width-only gating', {
+        targetElement: observeTarget.tagName + (observeTarget.className ? `.${observeTarget.className}` : ''),
+        initialWidth: targetRect.width.toFixed(2)
+      });
     }
-  }, [handleResize]);
+
+    // Create single observer with width-only gating and singleflight scheduler
+    setupResizeObserverOnce(observeTarget, createPerformResize());
+  }, [createPerformResize, isReady]);
 
   // Ensure ResizeObserver is set up when conditions are met
   useEffect(() => {
@@ -1819,10 +2236,12 @@ export const useOSMD = (
         // Inject data-note-id attributes after initial render
         // Use nested requestAnimationFrame to ensure DOM is fully committed
         requestAnimationFrame(() => {
-          // Build measure cache first
-          buildMeasureCache();
-          injectNoteIdAttributes();
-          drawPracticeRangeBorder();
+          // Build measure cache first - with ResizeObserver pause
+          withResizeObserverPaused(() => {
+            buildMeasureCache();
+            injectNoteIdAttributes();
+            drawPracticeRangeBorder();
+          });
         });
         
         //  MINIMAL CURSOR IMPLEMENTATION
@@ -2628,7 +3047,9 @@ export const useOSMD = (
   
   useEffect(() => {
     if (osmdRef.current) {
-      drawPracticeRangeBorder();
+      withResizeObserverPaused(() => {
+        drawPracticeRangeBorder();
+      });
     }
   }, [customRangeActive, customStartMeasure, customEndMeasure, drawPracticeRangeBorder]);
   
@@ -2640,23 +3061,27 @@ export const useOSMD = (
   // Also redraw on zoom changes
   useEffect(() => {
     if (isReady && osmdRef.current) {
-      drawPracticeRangeBorder();
+      withResizeObserverPaused(() => {
+        drawPracticeRangeBorder();
+      });
     }
   }, [zoomLevel, isReady, drawPracticeRangeBorder]);
 
   // Cleanup effect (critical for memory management)
   useEffect(() => {
     return () => {
-      // Cleanup ResizeObserver
-      if (resizeObserverRef.current) {
-        resizeObserverRef.current.disconnect();
-        resizeObserverRef.current = null;
-      }
+      // Cleanup single ResizeObserver system
+      cleanupResizeObserver();
 
       // Clear any pending resize timeout
       if (resizeTimeoutRef.current) {
         clearTimeout(resizeTimeoutRef.current);
         resizeTimeoutRef.current = null;
+      }
+
+      // Cleanup practice border overlays
+      if (containerRef.current) {
+        clearPracticeBorderOverlays(containerRef.current);
       }
 
       // CRITICAL: Proper OSMD disposal to prevent memory leaks

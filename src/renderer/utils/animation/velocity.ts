@@ -7,25 +7,30 @@
 
 /**
  * Calculate key press depth based on MIDI velocity
- * Maps velocity (1-127) to visual depth with minimum threshold
+ * Maps velocity (0-127) to visual depth with MIDI semantics
  * 
- * @param velocity - MIDI velocity (1-127)
+ * @param velocity - MIDI velocity (0-127, where 0=note-off)
  * @param maxDepth - Maximum key press depth in pixels
  * @param minDepth - Minimum visible depth (default 0.5)
- * @returns Press depth in pixels
+ * @returns Press depth in pixels (0 for note-off)
  */
 export function getDepthForVelocity(
   velocity: number, 
   maxDepth: number, 
   minDepth: number = 0.5
 ): number {
-  // Clamp velocity to valid MIDI range
-  const clampedVelocity = Math.max(1, Math.min(127, velocity));
+  // Sanitize depth bounds
+  if (maxDepth < 0) maxDepth = 0;
+  if (minDepth < 0) minDepth = 0;
+  if (minDepth > maxDepth) minDepth = maxDepth;
+
+  // MIDI note-off (velocity 0) = no press depth
+  if (velocity <= 0) return 0;
   
-  // Normalize to 0-1 range
+  // Clamp to valid MIDI range and map to depth
+  const clampedVelocity = Math.min(127, Math.max(1, velocity | 0));
   const normalized = clampedVelocity / 127;
   
-  // Map to depth range with minimum threshold
   return minDepth + (normalized * (maxDepth - minDepth));
 }
 
@@ -52,25 +57,3 @@ export function getOpacityForVelocity(
   return minOpacity + (scaledNormalized * (maxOpacity - minOpacity));
 }
 
-/**
- * Calculate animation duration based on velocity
- * Harder hits = faster animations (more realistic)
- * 
- * @param velocity - MIDI velocity (1-127)
- * @param baseDuration - Base duration in ms
- * @param speedFactor - How much velocity affects speed (0-1)
- * @returns Animation duration in ms
- */
-export function getDurationForVelocity(
-  velocity: number,
-  baseDuration: number,
-  speedFactor: number = 0.3
-): number {
-  const clampedVelocity = Math.max(1, Math.min(127, velocity));
-  const normalized = clampedVelocity / 127;
-  
-  // Higher velocity = shorter duration
-  const durationMultiplier = 1 - (normalized * speedFactor);
-  
-  return baseDuration * durationMultiplier;
-}

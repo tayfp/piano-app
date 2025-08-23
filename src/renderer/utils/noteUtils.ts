@@ -17,22 +17,25 @@ export const extractFirstDataNoteId = (raw: string | null): string | null =>
 // Standard note names using sharps (preferred in digital audio)
 const NOTE_NAMES = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'];
 
+// Tiny, one-time LUT for 0..127
+const MIDI_NOTE_TABLE: string[] = Array.from({ length: 128 }, (_, i) => {
+  const noteIndex = i % 12;
+  // i is an integer, so bitwise is safe here and slightly faster than Math.floor
+  const octave = (i / 12) | 0; // 0..10
+  return `${NOTE_NAMES[noteIndex]}${octave - 1}`; // MIDI 60 = C4
+});
+
 /**
  * Convert MIDI note number to human-readable note name
  * @param midiNumber MIDI note number (0-127)
  * @returns Note name with octave (e.g., "C4", "A#3")
  */
 export function midiToNoteName(midiNumber: number): string {
-  // Validate MIDI range
-  if (midiNumber < 0 || midiNumber > 127 || !Number.isInteger(midiNumber)) {
+  // Preserve original contract (reject out-of-range/non-integers)
+  if (!Number.isInteger(midiNumber) || midiNumber < 0 || midiNumber > 127) {
     return `Invalid(${midiNumber})`;
   }
-  
-  // Calculate note and octave
-  const noteIndex = midiNumber % 12;
-  const octave = Math.floor(midiNumber / 12) - 1; // MIDI 60 = C4
-  
-  return `${NOTE_NAMES[noteIndex]}${octave}`;
+  return MIDI_NOTE_TABLE[midiNumber];
 }
 
 /**
@@ -42,47 +45,42 @@ export function midiToNoteName(midiNumber: number): string {
  * @returns Human-readable note name
  */
 export function extractNoteNameFromPitch(pitch: any, midiValue: number): string {
-  // Try various ways to extract note name from OSMD pitch object
-  
-  // Method 1: Check for Name property (common in OSMD)
-  if (pitch && typeof pitch.Name === 'string' && pitch.Name.length > 0) {
-    // Add octave if available
-    if (typeof pitch.Octave === 'number') {
-      return `${pitch.Name}${pitch.Octave}`;
+  // Fast path: consolidated Name/name + Octave/octave check
+  if (pitch && typeof pitch === 'object') {
+    const name =
+      (typeof pitch.Name === 'string' && pitch.Name) ||
+      (typeof pitch.name === 'string' && pitch.name) ||
+      null;
+
+    if (name) {
+      const octave =
+        (typeof pitch.Octave === 'number' && pitch.Octave) ||
+        (typeof pitch.octave === 'number' && pitch.octave);
+      return typeof octave === 'number' ? `${name}${octave}` : name;
     }
-    return pitch.Name;
-  }
-  
-  // Method 2: Check for name property (lowercase variant)
-  if (pitch && typeof pitch.name === 'string' && pitch.name.length > 0) {
-    if (typeof pitch.octave === 'number') {
-      return `${pitch.name}${pitch.octave}`;
+
+    // FundamentalNote + Octave
+    const fn = pitch.FundamentalNote;
+    const oct = pitch.Octave;
+    if (fn != null && typeof oct === 'number') {
+      const noteName =
+        (typeof fn?.Name === 'string' && fn.Name) ||
+        (typeof fn === 'string' && fn) ||
+        null;
+      if (noteName) return `${noteName}${oct}`;
     }
-    return pitch.name;
   }
-  
-  // Method 3: Check if toString() returns something meaningful
+
+  // toString fall-through (works for class instances with meaningful toString)
   if (pitch && typeof pitch.toString === 'function') {
-    const stringValue = pitch.toString();
-    if (stringValue && stringValue !== '[object Object]' && stringValue.length < 10) {
-      return stringValue;
-    }
+    const s = String(pitch);
+    if (s && s !== '[object Object]' && s.length < 10) return s;
   }
-  
-  // Method 4: Try accessing FundamentalNote and Octave separately
-  if (pitch && pitch.FundamentalNote && pitch.Octave !== undefined) {
-    const noteName = pitch.FundamentalNote.Name || pitch.FundamentalNote;
-    if (typeof noteName === 'string') {
-      return `${noteName}${pitch.Octave}`;
-    }
-  }
-  
-  // Method 5: Check for direct string value
-  if (typeof pitch === 'string' && pitch.length > 0) {
-    return pitch;
-  }
-  
-  // Fallback: Convert MIDI number to note name
+
+  // direct string
+  if (typeof pitch === 'string' && pitch.length > 0) return pitch;
+
+  // fallback
   return midiToNoteName(midiValue);
 }
 

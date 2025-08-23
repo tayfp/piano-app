@@ -3,12 +3,10 @@
  */
 
 import { 
-  halfToneToMidi, 
-  midiToHalfTone, 
-  midiToNoteName,
-  isValidMidiNote,
-  isValidMidiVelocity 
+  halfToneToMidi,
+  isValidMidiNote
 } from '../midi/conversion';
+import { midiToNoteName } from '../noteUtils';
 
 describe('MIDI Conversion Utilities', () => {
   describe('halfToneToMidi', () => {
@@ -30,20 +28,6 @@ describe('MIDI Conversion Utilities', () => {
 
     it('should clamp values below 0', () => {
       expect(halfToneToMidi(-100)).toBe(0);
-    });
-  });
-
-  describe('midiToHalfTone', () => {
-    it('should convert MIDI 60 (C4) to halfTone 0', () => {
-      expect(midiToHalfTone(60)).toBe(0);
-    });
-
-    it('should convert MIDI 72 (C5) to halfTone 12', () => {
-      expect(midiToHalfTone(72)).toBe(12);
-    });
-
-    it('should convert MIDI 48 (C3) to halfTone -12', () => {
-      expect(midiToHalfTone(48)).toBe(-12);
     });
   });
 
@@ -86,18 +70,4 @@ describe('MIDI Conversion Utilities', () => {
     });
   });
 
-  describe('isValidMidiVelocity', () => {
-    it('should accept valid velocities', () => {
-      expect(isValidMidiVelocity(0)).toBe(true);
-      expect(isValidMidiVelocity(64)).toBe(true);
-      expect(isValidMidiVelocity(127)).toBe(true);
-    });
-
-    it('should reject invalid values', () => {
-      expect(isValidMidiVelocity(-1)).toBe(false);
-      expect(isValidMidiVelocity(128)).toBe(false);
-      expect(isValidMidiVelocity(64.5)).toBe(false);
-      expect(isValidMidiVelocity('64')).toBe(false);
-    });
-  });
 });

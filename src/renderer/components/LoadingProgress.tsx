@@ -51,20 +51,22 @@ export const LoadingProgress: React.FC = () => {
     
     const handleCompleteRender = (event: CustomEvent) => {
       const data = event.detail;
-      if (data.jobId === currentJob) {
-        setState({
-          stage: 'ready',
-          measuresLoaded: data.totalMeasures || 0,
-          totalMeasures: data.totalMeasures,
-          progress: 100
-        });
-        
-        // Hide after a short delay
-        setTimeout(() => {
-          setState({ stage: 'idle', measuresLoaded: 0, progress: 0 });
-          useFileLoadingStore.getState().setStage('idle');
-        }, 1000);
-      }
+      if (data.jobId !== currentJob) return;
+
+      setState({
+        stage: 'ready',
+        measuresLoaded: data.totalMeasures || 0,
+        totalMeasures: data.totalMeasures,
+        progress: 100
+      });
+      
+      // Guard against races with subsequent jobs starting within the delay
+      const jobAtSchedule = currentJob;
+      setTimeout(() => {
+        if (currentJob !== jobAtSchedule) return;
+        setState({ stage: 'idle', measuresLoaded: 0, progress: 0 });
+        useFileLoadingStore.getState().setStage('idle');
+      }, 1000);
     };
     
     window.addEventListener('osmd:first-render', handleFirstRender as EventListener);

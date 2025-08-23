@@ -319,13 +319,16 @@ export const getZoomMetrics = (): ZoomMetrics => {
 
 // Enhanced zoom latency logging that tracks metrics
 export const logZoomLatency = (latencyMs: number) => {
+  // Guard against junk that would poison metrics
+  if (!Number.isFinite(latencyMs) || latencyMs < 0 || latencyMs > 60_000) return;
+
   // Track in cache for metrics
   zoomMetricsCache.push(latencyMs);
   if (zoomMetricsCache.length > MAX_ZOOM_METRICS) {
     zoomMetricsCache.shift(); // Remove oldest
   }
-  
-  // Call performance logger
+
+  // Call performance logger (level 3 as before)
   perfLogger.logLatency(latencyMs, 3);
 };
 

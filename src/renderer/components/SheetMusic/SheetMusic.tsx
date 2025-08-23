@@ -257,7 +257,8 @@ export const SheetMusic: React.FC<SheetMusicProps> = ({ musicXML, scoreId, class
   // Keyboard shortcuts for debugging
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.ctrlKey && e.shiftKey && e.key === 'D') {
+      if (e.ctrlKey && e.shiftKey && e.code === 'KeyD') {
+        e.preventDefault();
         setShowDebugOverlay(prev => !prev);
       }
     };

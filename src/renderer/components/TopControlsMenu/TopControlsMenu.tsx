@@ -59,8 +59,12 @@ export const TopControlsMenu: React.FC<TopControlsMenuProps> = ({
   
   // Handle mouse leave with grace period
   const handleMouseLeave = () => {
+    if (closeTimerRef.current) {
+      clearTimeout(closeTimerRef.current);
+    }
     closeTimerRef.current = setTimeout(() => {
       setIsOpen(false);
+      closeTimerRef.current = undefined;
     }, 300);
   };
   
@@ -68,6 +72,7 @@ export const TopControlsMenu: React.FC<TopControlsMenuProps> = ({
   const handleMouseEnter = () => {
     if (closeTimerRef.current) {
       clearTimeout(closeTimerRef.current);
+      closeTimerRef.current = undefined;
     }
   };
   

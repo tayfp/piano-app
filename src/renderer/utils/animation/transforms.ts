@@ -58,8 +58,9 @@ export function buildKeyBoxShadow(
     // Inset shadow for pressed appearance
     const insetShadow = `inset 0 ${depth}px ${depth * 2}px rgba(0,0,0,0.2)`;
     
-    // Glow effect based on velocity
-    const glowIntensity = (velocity / 127);
+    // Glow effect based on velocity (clamp to prevent invalid CSS alpha)
+    const clampedVelocity = Math.max(0, Math.min(127, velocity | 0));
+    const glowIntensity = (clampedVelocity / 127);
     const glowShadow = `0 ${depth}px ${8 + depth * 2}px rgba(76, 175, 80, ${glowIntensity * 0.4})`;
     
     return `${insetShadow}, ${glowShadow}`;

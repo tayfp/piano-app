@@ -43,21 +43,32 @@ export const ThemeProvider: React.FC<PropsWithChildren> = ({ children }) => {
     return () => clearTimeout(timeoutId);
   }, [themeState]);
 
-  // Set up keyboard shortcuts (Ctrl+1/2/3)
+  // Set up keyboard shortcuts (Ctrl+Shift+1/2/3)
   useEffect(() => {
+    const isTextInputTarget = (target: EventTarget | null): boolean => {
+      const el = target as HTMLElement | null;
+      if (!el) return false;
+      const tag = el.tagName?.toLowerCase();
+      return tag === 'input' || tag === 'textarea' || el.isContentEditable;
+    };
+
     const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.ctrlKey && e.shiftKey) {
-        switch (e.key) {
-          case '1':
-            setThemeState({ name: 'light' });
-            break;
-          case '2':
-            setThemeState({ name: 'sepia' });
-            break;
-          case '3':
-            setThemeState({ name: 'hybrid-dark' });
-            break;
-        }
+      if (!e.ctrlKey || !e.shiftKey) return;
+      if (isTextInputTarget(e.target)) return;
+
+      switch (e.key) {
+        case '1':
+          setTheme('light');
+          e.preventDefault();
+          break;
+        case '2':
+          setTheme('sepia');
+          e.preventDefault();
+          break;
+        case '3':
+          setTheme('hybrid-dark');
+          e.preventDefault();
+          break;
       }
     };
 
