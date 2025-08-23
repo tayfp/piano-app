@@ -1,0 +1,207 @@
+/**
+ * TempoPreview Styles
+ * 
+ * Accessible, performant styling for tempo timeline
+ */
+
+.tempo-preview {
+  background: var(--color-background-secondary, #f5f5f5);
+  border-radius: 8px;
+  padding: 16px;
+  font-family: var(--font-family, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif);
+}
+
+/* Loading state */
+.tempo-preview--loading {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  color: var(--color-text-secondary, #666);
+}
+
+.tempo-preview__spinner {
+  width: 20px;
+  height: 20px;
+  border: 2px solid transparent;
+  border-top-color: var(--color-primary, #4a90e2);
+  border-radius: 50%;
+  animation: tempo-spin 0.8s linear infinite;
+}
+
+@keyframes tempo-spin {
+  to { transform: rotate(360deg); }
+}
+
+/* Error state */
+.tempo-preview--error {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--color-error, #d32f2f);
+  background: var(--color-error-background, #ffebee);
+}
+
+.tempo-preview__error-icon {
+  font-size: 20px;
+}
+
+/* Empty state */
+.tempo-preview--empty {
+  text-align: center;
+  color: var(--color-text-secondary, #666);
+  padding: 32px;
+}
+
+/* Summary section */
+.tempo-preview__summary {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  margin-bottom: 16px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid var(--color-border, #e0e0e0);
+  font-size: 14px;
+}
+
+.tempo-preview__badge {
+  background: var(--color-primary, #4a90e2);
+  color: white;
+  padding: 2px 8px;
+  border-radius: 12px;
+  font-size: 12px;
+  font-weight: 500;
+}
+
+/* Timeline */
+.tempo-preview__timeline {
+  display: grid;
+  gap: 8px;
+  max-height: 400px;
+  overflow-y: auto;
+}
+
+/* Event cards */
+.tempo-preview__event {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr auto;
+  gap: 12px;
+  align-items: center;
+  padding: 12px;
+  background: white;
+  border-radius: 6px;
+  border-left: 4px solid transparent;
+  transition: all 0.2s ease;
+}
+
+.tempo-preview__event:hover {
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+}
+
+/* Confidence indicators */
+.tempo-preview__event.confidence-high {
+  border-left-color: var(--color-success, #4caf50);
+}
+
+.tempo-preview__event.confidence-medium {
+  border-left-color: var(--color-warning, #ff9800);
+}
+
+.tempo-preview__event.confidence-low {
+  border-left-color: var(--color-text-disabled, #bdbdbd);
+}
+
+/* Event content */
+.tempo-preview__measure {
+  font-weight: 500;
+  color: var(--color-text-primary, #333);
+}
+
+.tempo-preview__bpm {
+  font-size: 18px;
+  font-weight: 600;
+  color: var(--color-primary, #4a90e2);
+}
+
+.tempo-preview__metadata {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  color: var(--color-text-secondary, #666);
+}
+
+.tempo-preview__source {
+  padding: 2px 6px;
+  background: var(--color-background-tertiary, #eeeeee);
+  border-radius: 4px;
+}
+
+.tempo-preview__confidence {
+  font-size: 16px;
+  line-height: 1;
+}
+
+/* Override button */
+.tempo-preview__override {
+  padding: 4px 12px;
+  background: transparent;
+  border: 1px solid var(--color-border, #e0e0e0);
+  border-radius: 4px;
+  font-size: 12px;
+  color: var(--color-text-secondary, #666);
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.tempo-preview__override:hover {
+  background: var(--color-primary, #4a90e2);
+  color: white;
+  border-color: var(--color-primary, #4a90e2);
+}
+
+.tempo-preview__override:focus {
+  outline: 2px solid var(--color-primary, #4a90e2);
+  outline-offset: 2px;
+}
+
+/* Scrollbar styling */
+.tempo-preview__timeline::-webkit-scrollbar {
+  width: 6px;
+}
+
+.tempo-preview__timeline::-webkit-scrollbar-track {
+  background: var(--color-background-tertiary, #eeeeee);
+  border-radius: 3px;
+}
+
+.tempo-preview__timeline::-webkit-scrollbar-thumb {
+  background: var(--color-text-disabled, #bdbdbd);
+  border-radius: 3px;
+}
+
+.tempo-preview__timeline::-webkit-scrollbar-thumb:hover {
+  background: var(--color-text-secondary, #666);
+}
+
+/* High contrast mode support */
+@media (prefers-contrast: high) {
+  .tempo-preview__event {
+    border: 1px solid currentColor;
+  }
+  
+  .tempo-preview__confidence {
+    font-weight: bold;
+  }
+}
+
+/* Reduced motion support */
+@media (prefers-reduced-motion: reduce) {
+  .tempo-preview__spinner {
+    animation: none;
+    opacity: 0.6;
+  }
+  
+  .tempo-preview__event {
+    transition: none;
+  }
+}

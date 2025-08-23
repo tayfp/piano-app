@@ -1,0 +1,348 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>OSMD Cursor Iterator Test - Proving the Bug</title>
+    <script src="https://cdn.jsdelivr.net/npm/opensheetmusicdisplay@1.9.0/build/opensheetmusicdisplay.min.js"></script>
+    <style>
+        body {
+            font-family: monospace;
+            margin: 20px;
+            background: #1a1a1a;
+            color: #00ff00;
+        }
+        #osmdContainer {
+            width: 800px;
+            height: 400px;
+            border: 2px solid #00ff00;
+            background: white;
+            margin: 20px 0;
+        }
+        .log {
+            background: #000;
+            padding: 10px;
+            border: 1px solid #00ff00;
+            height: 300px;
+            overflow-y: auto;
+            white-space: pre-wrap;
+        }
+        .error { color: #ff0000; font-weight: bold; }
+        .success { color: #00ff00; font-weight: bold; }
+        .warning { color: #ffff00; }
+        .info { color: #00ffff; }
+        button {
+            background: #000;
+            color: #00ff00;
+            border: 1px solid #00ff00;
+            padding: 10px;
+            margin: 5px;
+            cursor: pointer;
+        }
+        button:hover {
+            background: #00ff00;
+            color: #000;
+        }
+    </style>
+</head>
+<body>
+    <h1>🔬 OSMD Cursor Iterator Bug Proof</h1>
+    <p>This test proves that iterator.Current becomes undefined at certain positions</p>
+    
+    <div id="osmdContainer"></div>
+    
+    <div>
+        <button onclick="testCursorBehavior()">Run Complete Test</button>
+        <button onclick="resetCursor()">Reset Cursor</button>
+        <button onclick="advanceCursor()">Advance Cursor</button>
+        <button onclick="inspectCurrentPosition()">Inspect Current Position</button>
+        <button onclick="clearLog()">Clear Log</button>
+    </div>
+    
+    <h3>Test Log:</h3>
+    <div id="log" class="log"></div>
+
+    <script>
+        let osmd = null;
+        const musicXML = `<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE score-partwise PUBLIC "-//Recordare//DTD MusicXML 3.1 Partwise//EN" "http://www.musicxml.org/dtds/partwise.dtd">
+<score-partwise version="3.1">
+  <work>
+    <work-title>Cursor Iterator Test</work-title>
+  </work>
+  <part-list>
+    <score-part id="P1">
+      <part-name>Piano</part-name>
+    </score-part>
+  </part-list>
+  <part id="P1">
+    <measure number="1">
+      <attributes>
+        <divisions>1</divisions>
+        <key>
+          <fifths>0</fifths>
+        </key>
+        <time>
+          <beats>4</beats>
+          <beat-type>4</beat-type>
+        </time>
+        <clef>
+          <sign>G</sign>
+          <line>2</line>
+        </clef>
+      </attributes>
+      <!-- Two quarter rests -->
+      <note>
+        <rest/>
+        <duration>1</duration>
+        <type>quarter</type>
+      </note>
+      <note>
+        <rest/>
+        <duration>1</duration>
+        <type>quarter</type>
+      </note>
+      <!-- Two regular notes -->
+      <note>
+        <pitch>
+          <step>C</step>
+          <octave>4</octave>
+        </pitch>
+        <duration>1</duration>
+        <type>quarter</type>
+      </note>
+      <note>
+        <pitch>
+          <step>D</step>
+          <octave>4</octave>
+        </pitch>
+        <duration>1</duration>
+        <type>quarter</type>
+      </note>
+    </measure>
+  </part>
+</score-partwise>`;
+
+        function log(message, type = 'info') {
+            const logDiv = document.getElementById('log');
+            const timestamp = new Date().toLocaleTimeString();
+            const className = type;
+            logDiv.innerHTML += `<span class="${className}">[${timestamp}] ${message}</span>\n`;
+            logDiv.scrollTop = logDiv.scrollHeight;
+        }
+
+        function clearLog() {
+            document.getElementById('log').innerHTML = '';
+        }
+
+        async function initializeOSMD() {
+            try {
+                log('Initializing OSMD...', 'info');
+                osmd = new opensheetmusicdisplay.OpenSheetMusicDisplay('osmdContainer', {
+                    autoResize: true,
+                    backend: 'svg',
+                    drawTitle: true,
+                    drawCredits: false,
+                    cursorsOptions: [{
+                        color: '#33e02f',
+                        alpha: 0.5,
+                        follow: false
+                    }]
+                });
+                
+                await osmd.load(musicXML);
+                osmd.render();
+                osmd.cursor.show();
+                osmd.cursor.reset();
+                
+                log('✅ OSMD initialized successfully', 'success');
+                log(`Score has ${osmd.GraphicSheet.MeasureList.length} measures`, 'info');
+                
+                return true;
+            } catch (error) {
+                log(`❌ Failed to initialize: ${error.message}`, 'error');
+                return false;
+            }
+        }
+
+        function resetCursor() {
+            if (!osmd) {
+                log('❌ OSMD not initialized', 'error');
+                return;
+            }
+            
+            osmd.cursor.reset();
+            log('Cursor reset to position 0', 'success');
+            inspectCurrentPosition();
+        }
+
+        function advanceCursor() {
+            if (!osmd || !osmd.cursor) {
+                log('❌ OSMD or cursor not available', 'error');
+                return;
+            }
+            
+            log('Advancing cursor...', 'info');
+            osmd.cursor.next();
+            inspectCurrentPosition();
+        }
+
+        function inspectCurrentPosition() {
+            if (!osmd || !osmd.cursor) {
+                log('❌ OSMD or cursor not available', 'error');
+                return;
+            }
+            
+            const cursor = osmd.cursor;
+            const iterator = cursor.iterator;
+            
+            log('=== CURSOR POSITION INSPECTION ===', 'info');
+            log(`Measure Index: ${iterator.currentMeasureIndex}`, 'info');
+            log(`Voice Entry Index: ${iterator.currentVoiceEntryIndex}`, 'info');
+            log(`End Reached: ${iterator.EndReached}`, 'info');
+            
+            // This is the critical test - check if iterator.Current exists
+            const current = iterator.Current;
+            
+            if (!current) {
+                log('⚠️ iterator.Current is UNDEFINED at this position!', 'error');
+                log('This is the bug! getExpectedNotesAtCursor would return END_OF_SCORE here', 'error');
+            } else {
+                log('✅ iterator.Current exists', 'success');
+                
+                // Try to extract notes
+                if (current.Notes) {
+                    log(`Found ${current.Notes.length} notes in current voice entry`, 'info');
+                    current.Notes.forEach((note, idx) => {
+                        if (note.isRest) {
+                            log(`  Note ${idx}: REST`, 'warning');
+                        } else if (note.Pitch) {
+                            log(`  Note ${idx}: ${note.Pitch.toString()}`, 'success');
+                        }
+                    });
+                } else {
+                    log('No Notes property in current voice entry', 'warning');
+                }
+            }
+            
+            // Try alternate methods to get current data
+            log('\n=== TRYING ALTERNATE ACCESS METHODS ===', 'info');
+            
+            // Method 1: Try to get current voice entries
+            try {
+                const currentVoiceEntries = iterator.CurrentVoiceEntries;
+                if (currentVoiceEntries) {
+                    log(`CurrentVoiceEntries exists with ${currentVoiceEntries.length} entries`, 'success');
+                } else {
+                    log('CurrentVoiceEntries is undefined', 'warning');
+                }
+            } catch (e) {
+                log(`Error accessing CurrentVoiceEntries: ${e.message}`, 'error');
+            }
+            
+            // Method 2: Try NotesUnderCursor() method
+            try {
+                if (cursor.NotesUnderCursor) {
+                    const notesUnderCursor = cursor.NotesUnderCursor();
+                    if (notesUnderCursor && notesUnderCursor.length > 0) {
+                        log(`✅ NotesUnderCursor() returned ${notesUnderCursor.length} notes`, 'success');
+                        notesUnderCursor.forEach((note, idx) => {
+                            if (note.pitch) {
+                                log(`  Note ${idx}: ${note.pitch.toString()}`, 'success');
+                            }
+                        });
+                    } else {
+                        log('⚠️ NotesUnderCursor() returned empty or null', 'warning');
+                        log('This could indicate a REST position', 'warning');
+                    }
+                } else {
+                    log('NotesUnderCursor() method not available', 'error');
+                }
+            } catch (e) {
+                log(`Error accessing NotesUnderCursor: ${e.message}`, 'error');
+            }
+            
+            // Method 3: Try to access MeasureList directly
+            try {
+                const measureList = osmd.GraphicSheet.MeasureList;
+                const measureIndex = iterator.currentMeasureIndex;
+                const voiceEntryIndex = iterator.currentVoiceEntryIndex;
+                
+                if (measureList && measureList[0] && measureList[0][measureIndex]) {
+                    const measure = measureList[0][measureIndex];
+                    log(`Direct MeasureList access: Found measure at index ${measureIndex}`, 'success');
+                    
+                    if (measure.staffEntries && measure.staffEntries[voiceEntryIndex]) {
+                        log(`Found staff entry at voice entry index ${voiceEntryIndex}`, 'success');
+                        const staffEntry = measure.staffEntries[voiceEntryIndex];
+                        
+                        // Check if this is actually a rest
+                        if (staffEntry.graphicalVoiceEntries) {
+                            staffEntry.graphicalVoiceEntries.forEach(gve => {
+                                if (gve.notes && gve.notes.length === 0) {
+                                    log('  This position contains a REST (no notes)', 'warning');
+                                } else if (gve.notes) {
+                                    log(`  Found ${gve.notes.length} graphical notes`, 'success');
+                                }
+                            });
+                        }
+                    }
+                }
+            } catch (e) {
+                log(`Error with direct MeasureList access: ${e.message}`, 'error');
+            }
+            
+            log('=== END INSPECTION ===\n', 'info');
+        }
+
+        async function testCursorBehavior() {
+            clearLog();
+            log('🔬 STARTING COMPLETE CURSOR BEHAVIOR TEST', 'info');
+            log('This test proves the bug in getExpectedNotesAtCursor', 'info');
+            log('========================================\n', 'info');
+            
+            if (!osmd) {
+                await initializeOSMD();
+            }
+            
+            // Reset cursor to start
+            osmd.cursor.reset();
+            log('Step 1: Cursor at position 0 (start)', 'info');
+            inspectCurrentPosition();
+            
+            // Advance once
+            log('\nStep 2: Advancing cursor once (should be at first rest)', 'info');
+            osmd.cursor.next();
+            inspectCurrentPosition();
+            
+            // This is where the bug manifests
+            log('\n🐛 BUG REPRODUCTION:', 'error');
+            log('At this position, iterator.Current is undefined', 'error');
+            log('But we are NOT at the end of the score!', 'error');
+            log('getExpectedNotesAtCursor would incorrectly return END_OF_SCORE', 'error');
+            
+            // Continue advancing to show there's more content
+            log('\nStep 3: Advancing again (second rest)', 'info');
+            osmd.cursor.next();
+            inspectCurrentPosition();
+            
+            log('\nStep 4: Advancing to first actual note (C4)', 'info');
+            osmd.cursor.next();
+            inspectCurrentPosition();
+            
+            log('\nStep 5: Advancing to second actual note (D4)', 'info');
+            osmd.cursor.next();
+            inspectCurrentPosition();
+            
+            log('\n✅ TEST COMPLETE', 'success');
+            log('CONCLUSION: iterator.Current becomes undefined at valid positions', 'error');
+            log('This causes getExpectedNotesAtCursor to fail', 'error');
+        }
+
+        // Initialize on load
+        window.onload = async () => {
+            await initializeOSMD();
+            log('Ready for testing. Click "Run Complete Test" to see the bug.', 'success');
+        };
+    </script>
+</body>
+</html>

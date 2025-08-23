@@ -1,0 +1,229 @@
+/**
+ * TopControlsMenu Styles
+ * 
+ * Performance-optimized with CSS transforms and GPU acceleration.
+ * Desktop uses :hover, mobile/keyboard uses explicit state.
+ */
+
+/* Invisible hover trigger zone for desktop */
+.menu-hover-zone {
+  position: fixed;
+  top: 36px; /* Offset for alpha banner */
+  left: 0;
+  right: 0;
+  height: 12px;
+  z-index: 1000;
+  pointer-events: auto;
+}
+
+/* Desktop hover behavior - CSS only, no JS needed */
+@media (hover: hover) {
+  .menu-hover-zone:hover ~ .controls-menu,
+  .controls-menu:hover {
+    transform: translateY(0);
+    opacity: 1;
+    visibility: visible;
+  }
+}
+
+/* Visible menu handle */
+.menu-handle {
+  position: fixed;
+  top: 36px; /* Offset for alpha banner */
+  left: 50%;
+  transform: translateX(-50%);
+  background: rgba(0, 0, 0, 0.4);
+  color: white;
+  border: none;
+  padding: 6px 16px;
+  border-bottom-left-radius: 12px;
+  border-bottom-right-radius: 12px;
+  cursor: pointer;
+  z-index: 1001;
+  transition: background-color 0.2s ease, transform 0.2s ease;
+  backdrop-filter: blur(8px);
+}
+
+.menu-handle:hover {
+  background: rgba(0, 0, 0, 0.6);
+  transform: translateX(-50%) translateY(1px);
+}
+
+.menu-handle:focus {
+  outline: 2px solid rgba(255, 255, 255, 0.5);
+  outline-offset: 2px;
+}
+
+/* Make handle always visible on touch devices */
+@media (hover: none) {
+  .menu-handle {
+    background: rgba(0, 0, 0, 0.6);
+  }
+}
+
+/* Main menu container */
+.controls-menu {
+  position: fixed;
+  top: 36px; /* Offset for alpha banner */
+  left: 0;
+  right: 0;
+  background: rgba(255, 255, 255, 0.95);
+  backdrop-filter: blur(10px);
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.1);
+  z-index: 999;
+  
+  /* Performance-optimized animation */
+  transform: translateY(-100%);
+  opacity: 0;
+  visibility: hidden;
+  transition: transform 0.2s cubic-bezier(0.4, 0, 0.2, 1), 
+              opacity 0.2s ease-out, 
+              visibility 0s 0.2s;
+  
+  /* Prevent blocking piano when hidden */
+  pointer-events: none;
+}
+
+.controls-menu.is-open {
+  transform: translateY(0);
+  opacity: 1;
+  visibility: visible;
+  transition: transform 0.2s cubic-bezier(0.4, 0, 0.2, 1), 
+              opacity 0.2s ease-out, 
+              visibility 0s;
+  pointer-events: auto;
+}
+
+/* Menu content layout */
+.menu-content {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: 48px;
+  padding: 16px 24px;
+  min-height: 60px;
+}
+
+/* Menu sections */
+.menu-section {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+/* Menu buttons */
+.menu-button {
+  padding: 8px 16px;
+  border: 1px solid #e0e0e0;
+  border-radius: 6px;
+  background: white;
+  color: #333;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  white-space: nowrap;
+}
+
+.menu-button:hover {
+  background: #f5f5f5;
+  border-color: #ccc;
+  transform: translateY(-1px);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+}
+
+.menu-button:focus {
+  outline: 2px solid #4CAF50;
+  outline-offset: 2px;
+}
+
+.menu-button:active {
+  transform: translateY(0);
+}
+
+.menu-button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  transform: none;
+}
+
+/* Practice button specific */
+.practice-button {
+  background: #4CAF50;
+  color: white;
+  border: none;
+}
+
+.practice-button:hover:not(:disabled) {
+  background: #45a049;
+}
+
+/* Connection status */
+.connection-status {
+  font-size: 13px;
+  color: #666;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 8px;
+  background: rgba(0, 0, 0, 0.05);
+  border-radius: 4px;
+}
+
+/* Mobile adjustments */
+@media (max-width: 768px) {
+  /* Disable hover zone on mobile */
+  .menu-hover-zone {
+    display: none;
+  }
+  
+  .menu-content {
+    flex-direction: column;
+    gap: 16px;
+    padding: 12px;
+  }
+  
+  .menu-section {
+    width: 100%;
+    justify-content: center;
+    flex-wrap: wrap;
+  }
+  
+  .menu-button {
+    font-size: 13px;
+    padding: 6px 12px;
+  }
+}
+
+/* Reduced motion support */
+@media (prefers-reduced-motion: reduce) {
+  .controls-menu,
+  .controls-menu.is-open,
+  .menu-handle {
+    transition: none;
+  }
+}
+
+/* Dark mode support (if needed) */
+@media (prefers-color-scheme: dark) {
+  .controls-menu {
+    background: rgba(30, 30, 30, 0.95);
+    color: white;
+  }
+  
+  .menu-button {
+    background: #333;
+    color: white;
+    border-color: #555;
+  }
+  
+  .menu-button:hover {
+    background: #444;
+    border-color: #666;
+  }
+  
+  .connection-status {
+    background: rgba(255, 255, 255, 0.1);
+    color: #ccc;
+  }
+}

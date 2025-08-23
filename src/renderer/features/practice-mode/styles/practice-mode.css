@@ -1,0 +1,239 @@
+/**
+ * Practice Mode CSS
+ * Animations and styling for practice mode UI components
+ */
+
+/* Practice Mode Overlay */
+.practice-overlay {
+  background: linear-gradient(135deg, rgba(0, 0, 0, 0.85), rgba(0, 0, 0, 0.6));
+  backdrop-filter: blur(4px);
+  border-radius: 0 0 16px 16px;
+  padding: 1rem 1.5rem;
+  transition: opacity 300ms ease-in-out, transform 300ms ease-in-out;
+  opacity: 0;
+  transform: translateY(-20px);
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.practice-overlay--active {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+.practice-overlay--entering {
+  opacity: 0;
+  transform: translateY(-20px);
+}
+
+.practice-overlay--exiting {
+  opacity: 0;
+  transform: translateY(-20px);
+}
+
+.practice-overlay__content {
+  max-width: 700px;
+  margin: 0 auto;
+  text-align: center;
+  color: white;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', sans-serif;
+}
+
+.practice-overlay__status {
+  font-size: 1.5rem;
+  font-weight: bold;
+  margin-bottom: 1rem;
+  transition: color 200ms ease;
+}
+
+.practice-overlay__expected {
+  font-size: 1.3rem;
+  margin-bottom: 0.5rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.practice-overlay__expected span:first-child {
+  font-weight: 500;
+  opacity: 0.9;
+}
+
+.practice-overlay__expected span:last-child {
+  font-weight: 600;
+  font-family: 'SF Mono', Monaco, 'Cascadia Code', 'Roboto Mono', monospace;
+  background: rgba(255, 255, 255, 0.15);
+  padding: 0.2rem 0.6rem;
+  border-radius: 6px;
+  letter-spacing: 0.5px;
+}
+
+.practice-overlay__chord-indicator {
+  font-size: 0.85rem;
+  opacity: 0.75;
+  font-style: italic;
+  background: rgba(78, 205, 196, 0.2);
+  color: #4ecdc4;
+  padding: 0.1rem 0.4rem;
+  border-radius: 4px;
+  font-weight: 500;
+}
+
+.practice-overlay__hint {
+  font-size: 0.9rem;
+  opacity: 0.7;
+  font-style: italic;
+}
+
+.practice-overlay__attempts {
+  font-size: 0.9rem;
+  opacity: 0.8;
+  margin-top: 0.5rem;
+}
+
+.practice-overlay__wrong-notes {
+  font-size: 0.95rem;
+  color: #ff6b6b;
+  margin-top: 0.5rem;
+  background: rgba(255, 107, 107, 0.15);
+  border: 1px solid rgba(255, 107, 107, 0.3);
+  border-radius: 6px;
+  padding: 0.4rem 0.8rem;
+  font-weight: 500;
+  display: inline-block;
+}
+
+.practice-overlay__prompt {
+  font-size: 1rem;
+  opacity: 0.8;
+  animation: pulse 2s ease-in-out infinite;
+}
+
+/* Status-specific colors */
+.practice-overlay--listening .practice-overlay__status {
+  color: #4ecdc4;
+}
+
+.practice-overlay--evaluating .practice-overlay__status {
+  color: #f7dc6f;
+}
+
+.practice-overlay--correct .practice-overlay__status {
+  color: #52c41a;
+}
+
+.practice-overlay--incorrect .practice-overlay__status {
+  color: #ff6b6b;
+}
+
+/* Animations */
+@keyframes pulse {
+  0%, 100% {
+    opacity: 0.8;
+  }
+  50% {
+    opacity: 1;
+  }
+}
+
+/* Piano Key Highlighting for Practice Mode */
+.piano-key {
+  transition: background-color 200ms ease, box-shadow 200ms ease;
+}
+
+.piano-key--practice-expected {
+  background-color: #4ecdc4 !important;
+  box-shadow: 0 0 10px rgba(78, 205, 196, 0.5);
+}
+
+.piano-key--practice-correct {
+  background-color: #52c41a !important;
+  box-shadow: 0 0 10px rgba(82, 196, 26, 0.5);
+}
+
+.piano-key--practice-incorrect {
+  background-color: #ff6b6b !important;
+  box-shadow: 0 0 10px rgba(255, 107, 107, 0.5);
+}
+
+/* Hint System Styles */
+.hint {
+  background: rgba(0, 0, 0, 0.9);
+  border-radius: 8px;
+  padding: 1rem;
+  margin: 1rem auto;
+  max-width: 400px;
+  transition: opacity 300ms ease, transform 300ms ease;
+}
+
+.hint--entering {
+  opacity: 0;
+  transform: translateY(10px);
+}
+
+.hint--level-1 {
+  border: 2px solid #4ecdc4;
+}
+
+.hint--level-2 {
+  border: 2px solid #f7dc6f;
+}
+
+.hint--level-3 {
+  border: 2px solid #ff6b6b;
+}
+
+.hint-key--highlighted {
+  background-color: #f7dc6f !important;
+  animation: hint-pulse 1s ease-in-out infinite;
+}
+
+@keyframes hint-pulse {
+  0%, 100% {
+    box-shadow: 0 0 10px rgba(247, 220, 111, 0.5);
+  }
+  50% {
+    box-shadow: 0 0 20px rgba(247, 220, 111, 0.8);
+  }
+}
+
+/* Repeat Warning Styles */
+.repeat-warning {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.8);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 2000;
+  opacity: 0;
+  transition: opacity 300ms ease;
+}
+
+.repeat-warning--visible {
+  opacity: 1;
+}
+
+.repeat-warning--entering {
+  opacity: 0;
+}
+
+.repeat-warning__dialog {
+  background: white;
+  border-radius: 8px;
+  padding: 2rem;
+  max-width: 500px;
+  width: 90%;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
+  transform: scale(0.9);
+  transition: transform 300ms ease;
+}
+
+.repeat-warning--visible .repeat-warning__dialog {
+  transform: scale(1);
+}

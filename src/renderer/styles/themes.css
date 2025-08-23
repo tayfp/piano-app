@@ -1,0 +1,145 @@
+/* Urtext Piano Theme System - CSS Custom Properties */
+
+/* Default Light Theme (Improved) */
+:root {
+  /* Core UI Colors */
+  --abc-bg-primary: #faf9f7;
+  --abc-bg-secondary: #ffffff;
+  --abc-text-primary: #212529;
+  --abc-text-secondary: #6c757d;
+  --abc-accent-primary: #4CAF50;
+  --abc-accent-hover: #45a049;
+  --abc-border-color: #dee2e6;
+  --abc-shadow-color: rgba(0, 0, 0, 0.1);
+  
+  /* Enhanced Sheet Music System */
+  /* Tier 1: ABC Primitives (Raw values) */
+  --abc-color-white: #ffffff;
+  --abc-color-paper: #fefefe;
+  --abc-shadow-rgb: 0, 0, 0;
+  --abc-radius-lg: 12px;
+  
+  /* Spacing tokens */
+  --abc-spacing-xs: 0.25rem;
+  --abc-spacing-s: 0.5rem;
+  --abc-spacing-m: 1rem;
+  --abc-spacing-l: 1.5rem;
+  --abc-spacing-xl: 2rem;
+  --abc-spacing-xxl: 3rem;
+  
+  /* Tier 2: ABC Semantic Tokens (Light Theme) */
+  --abc-surface-raised-bg: var(--abc-color-white);
+  --abc-surface-raised-border: rgba(0, 0, 0, 0.12);
+  --abc-shadow-elevation-1: 0 2px 8px rgba(var(--abc-shadow-rgb), 0.1);
+  --abc-shadow-elevation-2: 0 4px 16px rgba(var(--abc-shadow-rgb), 0.15);
+  
+  /* Tier 3: ABC Component Tokens (Sheet Music) */
+  --abc-sheet-bg: var(--abc-surface-raised-bg);
+  --abc-sheet-border-color: var(--abc-surface-raised-border);
+  --abc-sheet-radius: var(--abc-radius-lg);
+  --abc-sheet-padding: var(--abc-spacing-xl);
+  --abc-sheet-shadow: var(--abc-shadow-elevation-2), var(--abc-shadow-elevation-1);
+  --abc-sheet-pattern: none; /* SVG pattern (feature-flagged) */
+  --abc-sheet-pattern-size: 200px 200px;
+  --abc-sheet-pattern-opacity: 0.05;
+  --abc-sheet-musical-color: rgba(var(--abc-shadow-rgb), var(--abc-sheet-pattern-opacity));
+  
+  /* Legacy compatibility */
+  --abc-sheet-ink: #000000;
+  --abc-cursor-color: #0D6EFD;
+  --abc-cursor-alpha: 0.5;
+  
+  /* Piano Key Colors */
+  --abc-key-white: #ffffff;
+  --abc-key-black: #000000;
+  --abc-key-active: #4CAF50;
+  
+  /* Smooth theme transitions */
+  transition: background-color 0.3s ease, color 0.3s ease;
+}
+
+/* Sepia Theme - Reduces eye strain */
+[data-theme="sepia"] {
+  /* Warm, paper-like tones */
+  --abc-bg-primary: #f5efe6;
+  --abc-bg-secondary: #faf6f0;
+  --abc-text-primary: #3b3531;
+  --abc-text-secondary: #6b5d54;
+  --abc-accent-primary: #8c6f5a;
+  --abc-accent-hover: #7a5e4c;
+  --abc-border-color: #d4c5b9;
+  --abc-shadow-color: rgba(59, 53, 49, 0.1);
+  
+  /* Sepia Theme Overrides */
+  /* Tier 2: ABC Semantic Tokens (Sepia Theme) */
+  --abc-surface-raised-bg: #f9f2e7;
+  --abc-surface-raised-border: rgba(59, 53, 49, 0.15);
+  --abc-shadow-rgb: 59, 53, 49;
+  --abc-shadow-elevation-1: 0 2px 8px rgba(var(--abc-shadow-rgb), 0.1);
+  --abc-shadow-elevation-2: 0 4px 16px rgba(var(--abc-shadow-rgb), 0.15);
+  
+  /* Tier 3: Enhanced Sheet Music (Sepia Mode) */
+  --abc-sheet-bg: var(--abc-surface-raised-bg);
+  --abc-sheet-border-color: var(--abc-surface-raised-border);
+  --abc-sheet-shadow: var(--abc-shadow-elevation-2), var(--abc-shadow-elevation-1);
+  --abc-sheet-pattern-opacity: 0.06; /* Subtle in warm tones */
+  --abc-sheet-musical-color: rgba(var(--abc-shadow-rgb), var(--abc-sheet-pattern-opacity));
+  
+  /* Legacy compatibility */
+  --abc-sheet-ink: #3b3531;
+  --abc-cursor-color: #D9534F;
+  --abc-cursor-alpha: 0.6;
+  
+  /* Warmer piano keys */
+  --abc-key-white: #faf6f0;
+  --abc-key-black: #2b2521;
+  --abc-key-active: #D9534F;
+}
+
+/* Hybrid Dark Theme - Dark UI, Light Sheet */
+[data-theme="hybrid-dark"] {
+  /* Dark UI elements */
+  --abc-bg-primary: #1a1d21;
+  --abc-bg-secondary: #212529;
+  --abc-text-primary: #f8f9fa;
+  --abc-text-secondary: #adb5bd;
+  --abc-accent-primary: #66bb6a;
+  --abc-accent-hover: #5cb85c;
+  --abc-border-color: #343a40;
+  --abc-shadow-color: rgba(0, 0, 0, 0.3);
+  
+  /* Dark Theme Overrides */
+  /* Tier 2: ABC Semantic Tokens (Dark Theme) */
+  --abc-surface-raised-bg: #2d2d2d;
+  --abc-surface-raised-border: rgba(255, 255, 255, 0.15);
+  --abc-shadow-rgb: 0, 0, 0;
+  --abc-shadow-elevation-1: 0 2px 8px rgba(var(--abc-shadow-rgb), 0.3);
+  --abc-shadow-elevation-2: 0 4px 16px rgba(var(--abc-shadow-rgb), 0.4);
+  
+  /* Tier 3: Enhanced Sheet Music (Dark Mode) */
+  --abc-sheet-bg: var(--abc-surface-raised-bg);
+  --abc-sheet-border-color: var(--abc-surface-raised-border);
+  --abc-sheet-shadow: var(--abc-shadow-elevation-2), var(--abc-shadow-elevation-1);
+  --abc-sheet-pattern-opacity: 0.08; /* Slightly more visible in dark */
+  --abc-sheet-musical-color: rgba(255, 255, 255, var(--abc-sheet-pattern-opacity));
+  
+  /* Legacy compatibility */
+  --abc-sheet-ink: #f8f9fa;
+  --abc-cursor-color: #0D6EFD;
+  --abc-cursor-alpha: 0.5;
+  
+  /* Piano keys remain high contrast */
+  --abc-key-white: #f8f9fa;
+  --abc-key-black: #000000;
+  --abc-key-active: #66bb6a;
+  
+  /* Enable dark scrollbars */
+  color-scheme: dark;
+}
+
+/* Apply theme colors to body */
+body {
+  background-color: var(--abc-bg-primary);
+  color: var(--abc-text-primary);
+  transition: background-color 0.3s ease, color 0.3s ease;
+}

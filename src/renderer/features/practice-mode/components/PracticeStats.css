@@ -1,0 +1,230 @@
+/**
+ * Practice Statistics Styles
+ * 
+ * Styles for the practice statistics dashboard components.
+ */
+
+/* Stats Grid */
+.stats-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 1rem;
+  margin-top: 1rem;
+}
+
+/* Stats Card */
+.stats-card {
+  background: var(--card-bg, #f5f5f5);
+  border-radius: 8px;
+  padding: 1.5rem;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+  transition: transform 0.2s ease;
+}
+
+.stats-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.15);
+}
+
+.stats-card h4 {
+  margin: 0 0 0.5rem 0;
+  font-size: 0.875rem;
+  color: var(--text-secondary, #666);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.stats-value {
+  font-size: 2rem;
+  font-weight: bold;
+  color: var(--text-primary, #333);
+  margin: 0.5rem 0;
+}
+
+.stats-subtitle {
+  font-size: 0.875rem;
+  color: var(--text-secondary, #666);
+}
+
+/* Trend indicators */
+.stats-card--up {
+  border-left: 4px solid var(--success-color, #4caf50);
+}
+
+.stats-card--down {
+  border-left: 4px solid var(--warning-color, #ff9800);
+}
+
+.stats-card--neutral {
+  border-left: 4px solid var(--neutral-color, #e0e0e0);
+}
+
+/* Practice Stats Container */
+.practice-stats {
+  padding: 1rem;
+}
+
+.practice-stats h3 {
+  margin-bottom: 1rem;
+  color: var(--text-primary, #333);
+}
+
+/* Loading Skeleton */
+.stats-skeleton {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 200px;
+  color: var(--text-secondary, #666);
+}
+
+/* Error State */
+.stats-error {
+  text-align: center;
+  padding: 2rem;
+  color: var(--error-color, #f44336);
+}
+
+.stats-error button {
+  margin-top: 1rem;
+  padding: 0.5rem 1rem;
+  background: var(--primary-color, #2196f3);
+  color: white;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+}
+
+.stats-error button:hover {
+  background: var(--primary-hover, #1976d2);
+}
+
+/* Session History */
+.session-history {
+  background: var(--card-bg, #f5f5f5);
+  border-radius: 8px;
+  padding: 1.5rem;
+  margin-top: 1rem;
+}
+
+.session-history h4 {
+  margin: 0 0 1rem 0;
+  color: var(--text-primary, #333);
+}
+
+.session-history-empty {
+  text-align: center;
+  padding: 2rem;
+  color: var(--text-secondary, #666);
+}
+
+.session-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.session-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 0.75rem;
+  background: white;
+  border-radius: 4px;
+  transition: background 0.2s ease;
+}
+
+.session-item:hover {
+  background: var(--hover-bg, #f0f0f0);
+}
+
+.session-date {
+  font-size: 0.875rem;
+  color: var(--text-secondary, #666);
+}
+
+.session-stats {
+  display: flex;
+  gap: 1rem;
+  font-weight: 500;
+}
+
+/* Session Trends */
+.session-trends {
+  display: flex;
+  gap: 2rem;
+  margin-bottom: 1rem;
+  padding: 1rem;
+  background: white;
+  border-radius: 4px;
+}
+
+.session-trends > div {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 1rem;
+  flex: 1;
+}
+
+.trend-up {
+  color: var(--success-color, #4caf50);
+  font-weight: bold;
+}
+
+.trend-down {
+  color: var(--warning-color, #ff9800);
+  font-weight: bold;
+}
+
+/* Progress Chart */
+.progress-chart {
+  background: var(--card-bg, #f5f5f5);
+  border-radius: 8px;
+  padding: 1.5rem;
+  margin-top: 1rem;
+}
+
+.progress-chart h4 {
+  margin: 0 0 1rem 0;
+  color: var(--text-primary, #333);
+}
+
+.progress-chart svg {
+  background: white;
+  border-radius: 4px;
+  border: 1px solid var(--border-color, #e0e0e0);
+}
+
+.improvement-stats {
+  margin-top: 1rem;
+  padding: 1rem;
+  background: white;
+  border-radius: 4px;
+  text-align: center;
+}
+
+.improvement-stats h5 {
+  margin: 0 0 0.5rem 0;
+  font-size: 0.875rem;
+  color: var(--text-secondary, #666);
+}
+
+.improvement-stats p {
+  margin: 0;
+  font-size: 1.5rem;
+  font-weight: bold;
+  color: var(--primary-color, #2196f3);
+}
+
+/* Responsive Design */
+@media (max-width: 768px) {
+  .stats-grid {
+    grid-template-columns: 1fr;
+  }
+  
+  .session-trends {
+    flex-direction: column;
+    gap: 1rem;
+  }
+}

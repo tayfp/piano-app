@@ -1,0 +1,385 @@
+/**
+ * SpeedChallengeStatus.css - Glassmorphic floating stats bar
+ * 
+ * Design requirements:
+ * - Fixed position 20px from bottom
+ * - Glassmorphic effect with backdrop blur
+ * - Individual stat cards with gradient backgrounds
+ * - Smooth animations and hover effects
+ * - Theme support (light/dark/sepia)
+ * - Performance: GPU-accelerated animations
+ */
+
+/* Container wrapper for positioning */
+.speed-challenge-status-container {
+  position: fixed;
+  bottom: 20px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 999;
+  pointer-events: auto;
+  animation: slideUp 0.4s cubic-bezier(0.68, -0.55, 0.265, 1.55);
+  will-change: transform;
+}
+
+/* Main stats bar with glassmorphism */
+.speed-challenge-status {
+  display: flex;
+  gap: 1.5rem;
+  padding: 1rem 1.5rem;
+  background: linear-gradient(
+    135deg,
+    rgba(255, 255, 255, 0.92) 0%,
+    rgba(255, 255, 255, 0.88) 100%
+  );
+  backdrop-filter: blur(20px) saturate(180%);
+  -webkit-backdrop-filter: blur(20px) saturate(180%);
+  border-radius: 24px;
+  border: 1px solid rgba(255, 255, 255, 0.6);
+  box-shadow: 
+    0 8px 32px rgba(0, 0, 0, 0.08),
+    0 2px 8px rgba(0, 0, 0, 0.04),
+    inset 0 1px 0 rgba(255, 255, 255, 0.6),
+    inset 0 -1px 0 rgba(0, 0, 0, 0.04);
+  min-height: 48px;
+  height: 8vh;
+  max-height: 80px;
+  align-items: center;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* Individual stat cards */
+.stat-card {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.5rem 1rem;
+  border-radius: 16px;
+  background: linear-gradient(135deg, var(--card-bg-start), var(--card-bg-end));
+  box-shadow: 
+    0 2px 8px var(--card-shadow),
+    inset 0 1px 0 var(--card-highlight);
+  transition: all 0.2s ease;
+  cursor: default;
+  position: relative;
+  overflow: hidden;
+}
+
+/* Hover effect for stat cards */
+.stat-card:hover {
+  transform: translateY(-2px) scale(1.02);
+  box-shadow: 
+    0 4px 12px var(--card-shadow-hover),
+    inset 0 1px 0 var(--card-highlight);
+}
+
+/* Stat card icon */
+.stat-icon {
+  font-size: 1.25rem;
+  filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.1));
+  animation: iconBounce 2s ease-in-out infinite;
+  animation-delay: var(--icon-delay, 0s);
+}
+
+/* Stat card content */
+.stat-content {
+  display: flex;
+  flex-direction: column;
+  gap: 0.125rem;
+}
+
+/* Stat label */
+.stat-label {
+  font-size: 0.625rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: rgba(255, 255, 255, 0.9);
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.1);
+}
+
+/* Stat value */
+.stat-value {
+  font-size: 1.25rem;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+  color: white;
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
+  line-height: 1;
+}
+
+/* Score card - Blue gradient */
+.stat-card--score {
+  --card-bg-start: #3b82f6;
+  --card-bg-end: #60a5fa;
+  --card-shadow: rgba(59, 130, 246, 0.3);
+  --card-shadow-hover: rgba(59, 130, 246, 0.4);
+  --card-highlight: rgba(255, 255, 255, 0.3);
+  --icon-delay: 0s;
+}
+
+/* Streak card - Orange gradient */
+.stat-card--streak {
+  --card-bg-start: #f59e0b;
+  --card-bg-end: #fbbf24;
+  --card-shadow: rgba(245, 158, 11, 0.3);
+  --card-shadow-hover: rgba(245, 158, 11, 0.4);
+  --card-highlight: rgba(255, 255, 255, 0.3);
+  --icon-delay: 0.1s;
+}
+
+/* Streak active state - pulse animation for streak > 5 */
+.stat-card--streak-active {
+  animation: streakPulse 1.5s ease-in-out infinite;
+}
+
+.stat-card--streak-active .stat-icon {
+  animation: iconSpin 2s linear infinite;
+}
+
+/* Accuracy card - Dynamic gradient based on performance */
+.stat-card--accuracy {
+  --icon-delay: 0.2s;
+}
+
+/* High accuracy (>90%) - Green */
+.stat-card--accuracy-high {
+  --card-bg-start: #10b981;
+  --card-bg-end: #34d399;
+  --card-shadow: rgba(16, 185, 129, 0.3);
+  --card-shadow-hover: rgba(16, 185, 129, 0.4);
+  --card-highlight: rgba(255, 255, 255, 0.3);
+}
+
+/* Medium accuracy (70-90%) - Yellow */
+.stat-card--accuracy-medium {
+  --card-bg-start: #f59e0b;
+  --card-bg-end: #fbbf24;
+  --card-shadow: rgba(245, 158, 11, 0.3);
+  --card-shadow-hover: rgba(245, 158, 11, 0.4);
+  --card-highlight: rgba(255, 255, 255, 0.3);
+}
+
+/* Low accuracy (<70%) - Red */
+.stat-card--accuracy-low {
+  --card-bg-start: #ef4444;
+  --card-bg-end: #f87171;
+  --card-shadow: rgba(239, 68, 68, 0.3);
+  --card-shadow-hover: rgba(239, 68, 68, 0.4);
+  --card-highlight: rgba(255, 255, 255, 0.3);
+}
+
+/* Timer card - Blue/Purple gradient */
+.stat-card--timer {
+  --card-bg-start: #3b82f6;
+  --card-bg-end: #9333ea;
+  --card-shadow: rgba(59, 130, 246, 0.3);
+  --card-shadow-hover: rgba(147, 51, 234, 0.4);
+  --card-highlight: rgba(255, 255, 255, 0.3);
+  background: linear-gradient(
+    135deg, 
+    rgba(59, 130, 246, 0.9) 0%, 
+    rgba(147, 51, 234, 0.9) 100%
+  );
+}
+
+/* Timer active state with pulsing animation */
+.timer-active .stat-value {
+  animation: timerPulse 1s ease-in-out infinite;
+}
+
+/* Timer history display */
+.stat-history {
+  font-size: 0.65rem;
+  opacity: 0.7;
+  margin-top: 2px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 120px;
+  color: rgba(255, 255, 255, 0.8);
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.1);
+}
+
+/* Animations */
+@keyframes slideUp {
+  from {
+    opacity: 0;
+    transform: translateX(-50%) translateY(20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(-50%) translateY(0);
+  }
+}
+
+@keyframes iconBounce {
+  0%, 100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-3px);
+  }
+}
+
+@keyframes streakPulse {
+  0%, 100% {
+    transform: scale(1);
+    box-shadow: 
+      0 2px 8px var(--card-shadow),
+      inset 0 1px 0 var(--card-highlight);
+  }
+  50% {
+    transform: scale(1.05);
+    box-shadow: 
+      0 4px 16px var(--card-shadow-hover),
+      inset 0 1px 0 var(--card-highlight),
+      0 0 20px var(--card-shadow);
+  }
+}
+
+@keyframes iconSpin {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@keyframes timerPulse {
+  0%, 100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 0.8;
+    transform: scale(1.05);
+  }
+}
+
+/* Dark theme support */
+[data-theme="dark"] .speed-challenge-status {
+  background: linear-gradient(
+    135deg,
+    rgba(30, 30, 30, 0.92) 0%,
+    rgba(20, 20, 20, 0.88) 100%
+  );
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  box-shadow: 
+    0 8px 32px rgba(0, 0, 0, 0.4),
+    0 2px 8px rgba(0, 0, 0, 0.2),
+    inset 0 1px 0 rgba(255, 255, 255, 0.1),
+    inset 0 -1px 0 rgba(0, 0, 0, 0.2);
+}
+
+/* Sepia theme support */
+[data-theme="sepia"] .speed-challenge-status {
+  background: linear-gradient(
+    135deg,
+    rgba(245, 237, 220, 0.92) 0%,
+    rgba(235, 227, 210, 0.88) 100%
+  );
+  border: 1px solid rgba(139, 119, 93, 0.2);
+  box-shadow: 
+    0 8px 32px rgba(139, 119, 93, 0.15),
+    0 2px 8px rgba(139, 119, 93, 0.08),
+    inset 0 1px 0 rgba(255, 248, 235, 0.6),
+    inset 0 -1px 0 rgba(139, 119, 93, 0.1);
+}
+
+/* Responsive design */
+@media (max-width: 768px) {
+  .speed-challenge-status-container {
+    bottom: 10px;
+    left: 10px;
+    right: 10px;
+    transform: none;
+  }
+  
+  .speed-challenge-status {
+    gap: 0.75rem;
+    padding: 0.75rem 1rem;
+    border-radius: 20px;
+    flex-wrap: wrap;
+    justify-content: center;
+  }
+  
+  .stat-card {
+    padding: 0.375rem 0.625rem;
+    gap: 0.5rem;
+    flex: 0 1 auto;
+    min-width: 80px;
+  }
+  
+  .stat-icon {
+    font-size: 1rem;
+  }
+  
+  .stat-label {
+    font-size: 0.5625rem;
+  }
+  
+  .stat-value {
+    font-size: 1rem;
+  }
+  
+  .stat-history {
+    font-size: 0.5rem;
+    max-width: 80px;
+  }
+}
+
+/* Reduced motion support */
+@media (prefers-reduced-motion: reduce) {
+  .speed-challenge-status-container {
+    animation: none;
+  }
+  
+  .stat-card {
+    transition: none;
+  }
+  
+  .stat-card:hover {
+    transform: none;
+  }
+  
+  .stat-icon {
+    animation: none;
+  }
+  
+  .stat-card--streak-active {
+    animation: none;
+  }
+  
+  .stat-card--streak-active .stat-icon {
+    animation: none;
+  }
+}
+
+/* High contrast mode support */
+@media (prefers-contrast: high) {
+  .speed-challenge-status {
+    border: 2px solid currentColor;
+    background: white;
+    backdrop-filter: none;
+  }
+  
+  .stat-card {
+    border: 2px solid currentColor;
+    background: transparent;
+  }
+  
+  .stat-label,
+  .stat-value {
+    color: currentColor;
+    text-shadow: none;
+  }
+}
+
+/* Print styles */
+@media print {
+  .speed-challenge-status-container {
+    display: none;
+  }
+}

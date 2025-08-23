@@ -1,0 +1,256 @@
+/* Sheet Music Component Styles */
+
+.sheet-music-wrapper {
+  /* ENHANCED BACKGROUND STYLING - GROWS TO FULL CONTENT HEIGHT */
+  /* Robust token system + theme switching */
+  /* Creative visual depth + musical aesthetics */
+  /* Performance-first + feature flags */
+  
+  /* REMOVED: flex: 1 - was constraining height to parent's 464px */
+  display: flex;
+  flex-direction: column; /* Using flex-column for future sibling elements */
+  position: relative;
+  width: 100%;
+  
+  /* Enhanced Background & Border */
+  background-color: var(--abc-sheet-bg);
+  border: 1px solid var(--abc-sheet-border-color);
+  border-radius: var(--abc-sheet-radius);
+  box-shadow: var(--abc-sheet-shadow);
+  padding: var(--abc-sheet-padding);
+  box-sizing: border-box;
+  
+  /* SVG Musical Patterns (Feature-flagged) */
+  background-image: var(--abc-sheet-pattern, none);
+  background-repeat: repeat;
+  background-size: var(--abc-sheet-pattern-size, 200px 200px);
+  
+  /* Modern enhancements */
+  container-type: inline-size; /* Container Queries support */
+  contain: paint; /* Performance isolation */
+  will-change: transform; /* Hint for hover animations */
+  
+  /* Micro-interaction enhancement */
+  transition: transform 0.15s ease, box-shadow 0.15s ease;
+}
+
+/* Debug styles removed - clean interface */
+
+.sheet-music-container {
+  /* OSMD content container - grows to content height */
+  /* REMOVED: flex: 1 - was constraining height, now grows naturally */
+  width: 100%;
+  position: relative; /* For absolute positioning of OSMD content */
+  
+  /* Add right padding to prevent SVG overflow */
+  padding-right: 20px;
+  
+  /* No other padding needed - wrapper handles spacing */
+  /* Let height be determined by content (SVG) */
+}
+
+/* Scrollbar styling moved to parent .sheet-music-section in App.css */
+
+/* Loading state */
+.sheet-music-loading {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 2rem;
+  gap: 1rem;
+}
+
+.loading-spinner {
+  width: 24px;
+  height: 24px;
+  border: 3px solid #f3f3f3;
+  border-top: 3px solid #3498db;
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
+}
+
+/* Error states */
+.sheet-music-error {
+  padding: 2rem;
+  text-align: center;
+  color: #e74c3c;
+}
+
+.sheet-music-error h3 {
+  margin-bottom: 0.5rem;
+}
+
+.sheet-music-error-boundary {
+  padding: 2rem;
+  text-align: center;
+  background-color: #fff3cd;
+  border: 1px solid #ffeaa7;
+  border-radius: 4px;
+  margin: 1rem;
+}
+
+.sheet-music-error-boundary details {
+  margin-top: 1rem;
+  text-align: left;
+}
+
+.sheet-music-error-boundary pre {
+  background-color: #f8f9fa;
+  padding: 1rem;
+  border-radius: 4px;
+  overflow-x: auto;
+  font-size: 0.875rem;
+}
+
+/* Empty state */
+.sheet-music-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 4rem 2rem;
+  color: #6c757d;
+  text-align: center;
+}
+
+.sheet-music-empty h3 {
+  margin-bottom: 0.5rem;
+  color: #495057;
+}
+
+/* Future controls placeholder */
+.sheet-music-controls {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  height: 0; /* Hidden for Phase 1 */
+  background-color: rgba(255, 255, 255, 0.95);
+  border-top: 1px solid #e9ecef;
+}
+
+/* OSMD-specific overrides */
+#osmd-container {
+  width: 100%;
+  /* Height will be determined by content, but allow scrolling */
+}
+
+.sheet-music-container svg {
+  /* max-width: 100%; */ /* Removed: Causes cursor alignment issues - SVG scaling mismatch */
+  height: auto;
+  display: block; /* Remove inline-block spacing */
+}
+
+/* Highlighted notes (for Phase 2) */
+.note-highlighted {
+  transition: all 0.1s ease-in-out;
+}
+
+/* Enhanced hover micro-interaction */
+.sheet-music-wrapper:hover {
+  transform: translateY(-1px); /* Subtle lift effect */
+  box-shadow: 
+    0 6px 20px rgba(0, 0, 0, 0.2),  /* Enhanced on hover */
+    0 3px 10px rgba(0, 0, 0, 0.15); /* Deeper base shadow */
+}
+
+/* REMOVED: CSS Masking for torn paper edges - keeping it simple */
+
+/* Modern Container Queries for Responsive Enhancement */
+/* Progressive enhancement */
+
+@container (min-width: 600px) {
+  .sheet-music-wrapper {
+    padding: 2rem;
+    border-radius: 16px;
+    --abc-sheet-pattern-size: 240px 240px; /* Larger pattern on wider containers */
+  }
+}
+
+@container (min-width: 900px) {
+  .sheet-music-wrapper {
+    padding: 2.5rem;
+    border-radius: 20px;
+    --abc-sheet-pattern-size: 280px 280px;
+  }
+}
+
+/* Progressive Background Polish */
+.sheet-music-wrapper::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: var(--abc-sheet-bg, #ffffff); /* FIXED: Solid color, no gradient */
+  border-radius: inherit;
+  box-shadow: inherit;
+  z-index: -1;
+  pointer-events: none;
+}
+
+/* Fallback: Traditional responsive breakpoints for older browsers */
+@media (max-width: 768px) {
+  .sheet-music-container {
+    min-height: 300px;
+    padding-right: 20px; /* Keep right padding only */
+  }
+  
+  .sheet-music-empty {
+    padding: 2rem 1rem;
+  }
+}
+
+@media (min-width: 900px) {
+  .sheet-music-container {
+    padding-right: 20px; /* Keep right padding only */
+  }
+}
+
+/* High contrast mode support */
+@media (prefers-contrast: high) {
+  .sheet-music-wrapper {
+    border: 2px solid currentColor;
+  }
+  
+  .sheet-music-container {
+    background-color: white;
+    color: black;
+  }
+}
+
+/* Accessibility focus styles */
+.sheet-music-container:focus {
+  outline: 2px solid #3498db;
+  outline-offset: 2px;
+}
+
+.sheet-music-container:focus:not(:focus-visible) {
+  outline: none;
+}
+
+/* Performance Optimizations */
+@media (prefers-reduced-motion: reduce) {
+  .sheet-music-wrapper,
+  .note-highlighted {
+    transition: none;
+  }
+}
+
+/* REMOVED: Duplicate hover shadow effect - already defined above */
+
+/* DEBUG: Highlight clickable notes in edit mode */
+.osmd-container[data-fingering-edit="true"] [data-note-id] {
+  cursor: pointer !important;
+}
+
+.osmd-container[data-fingering-edit="true"] [data-note-id]:hover {
+  fill: #0066cc !important;
+  stroke: #0066cc !important;
+  opacity: 0.8 !important;
+}
+
+/* DEBUG: Make fingering overlay visible - removed for production */

@@ -1,0 +1,31 @@
+/* AppLayout.css - Dedicated layout styles */
+.app-layout-root {
+  height: 100vh;
+  width: 100vw;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden; /* Prevent double scrollbars */
+  position: relative;
+}
+
+.app-layout-content {
+  flex: 1;
+  min-height: 0; /* Critical for flexbox shrinking */
+  display: flex;
+  flex-direction: column;
+  padding-top: 36px; /* Space for alpha banner */
+}
+
+/* Ensure no margin/padding on body propagates */
+body {
+  margin: 0;
+  padding: 0;
+  overflow: hidden; /* Prevent body scroll */
+}
+
+/* High-contrast mode support */
+@media (prefers-contrast: high) {
+  .app-layout-root {
+    border: 2px solid WindowText;
+  }
+}

@@ -1,0 +1,312 @@
+/* Responsive key height - width is now handled by fluid grid */
+:root {
+  --key-height: 180px;
+}
+
+@media (max-width: 1400px) {
+  :root {
+    --key-height: 150px;
+  }
+}
+
+@media (max-width: 1024px) {
+  :root {
+    --key-height: 120px;
+  }
+}
+
+.piano-container {
+  width: 100%;
+  padding: 20px;
+  box-sizing: border-box;
+  position: relative;
+  /* Remove overflow-x since piano will fit window width */
+}
+
+.piano-keyboard {
+  display: grid;
+  grid-template-columns: repeat(52, minmax(20px, 1fr));
+  grid-template-rows: var(--key-height);
+  gap: 0;
+  position: relative;
+  transform: translateZ(0);
+  width: 100%;
+  min-width: 1040px; /* Ensure minimum usable size */
+}
+
+.piano-key {
+  border: 1px solid #333;
+  cursor: pointer;
+  /* Remove transitions - handled by JavaScript animator */
+  padding: 0;
+  font: inherit;
+  color: inherit;
+  background: none;
+  -webkit-appearance: none;
+  -moz-appearance: none;
+  appearance: none;
+  /* Prepare for smooth animations */
+  will-change: auto;
+}
+
+.piano-key:focus {
+  outline: 2px solid #4caf50;
+  outline-offset: 2px;
+  /* Keep focus z-index for accessibility */
+  z-index: 3;
+}
+
+.piano-key--white {
+  background: linear-gradient(to bottom, #fff 0%, #f8f8f8 100%);
+  border-radius: 0 0 4px 4px;
+  grid-row: 1;
+}
+
+.piano-key--black {
+  background: linear-gradient(to bottom, #333 0%, #000 100%);
+  width: 60%;
+  height: 60%;
+  transform: translateX(-60%);
+  border-radius: 0 0 3px 3px;
+  grid-row: 1;
+  -webkit-transform: translateX(-60%);
+  -moz-transform: translateX(-60%);
+  -ms-transform: translateX(-60%);
+  /* Animator will add Y translation when pressed */
+}
+
+/* Black key pseudo-element needs to fill the visual area */
+.piano-key--black::after {
+  /* Reset the transform to fill the key properly */
+  transform: none;
+}
+
+/* Landmark key highlighting - using ::before to avoid conflict with active state */
+.piano-key--landmark {
+  position: relative;
+}
+
+.piano-key--landmark::before {
+  content: '';
+  position: absolute;
+  bottom: 5px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 4px;
+  height: 4px;
+  background-color: #4caf50;
+  border-radius: 50%;
+  z-index: 2; /* Above key but below active overlay */
+  pointer-events: none;
+}
+
+/* Subtle hover states - no transform since animator handles movement */
+.piano-key--white:hover {
+  background: linear-gradient(to bottom, #f8f8f8 0%, #e8e8e8 100%);
+}
+
+.piano-key--black:hover {
+  background: linear-gradient(to bottom, #444 0%, #111 100%);
+}
+
+/* Active state removed - JavaScript animator handles all movement */
+
+/* MIDI-triggered active states - Using pseudo-element overlay */
+.piano-key {
+  position: relative; /* Required for pseudo-element positioning */
+}
+
+/* Highlight overlay - only this animates, not the base key */
+.piano-key::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  pointer-events: none; /* Clicks pass through to button */
+  border-radius: inherit;
+  opacity: 0;
+  /* Smooth transition for fade effects */
+  transition: opacity 200ms ease-out;
+}
+
+/* White key highlight overlay - always has background, just hidden */
+.piano-key--white::after {
+  background: linear-gradient(to bottom, 
+    rgba(129, 199, 132, 0.8) 0%, 
+    rgba(102, 187, 106, 0.8) 100%);
+}
+
+/* Black key highlight overlay - always has background, just hidden */
+.piano-key--black::after {
+  background: linear-gradient(to bottom, 
+    rgba(76, 175, 80, 0.9) 0%, 
+    rgba(56, 142, 60, 0.9) 100%);
+}
+
+/* Active state - only changes opacity */
+.piano-key--white.piano-key--active::after,
+.piano-key--black.piano-key--active::after {
+  opacity: 1;
+}
+
+/* Velocity-sensitive highlighting levels - only apply when active */
+.piano-key--white.piano-key--active.velocity-level-1::after {
+  opacity: 0.6;
+}
+
+.piano-key--white.piano-key--active.velocity-level-2::after {
+  opacity: 0.7;
+}
+
+.piano-key--white.piano-key--active.velocity-level-3::after {
+  opacity: 0.8;
+}
+
+.piano-key--white.piano-key--active.velocity-level-4::after {
+  opacity: 0.9;
+}
+
+.piano-key--white.piano-key--active.velocity-level-5::after {
+  opacity: 1.0;
+}
+
+/* Black keys slightly more opaque for visibility */
+.piano-key--black.piano-key--active.velocity-level-1::after {
+  opacity: 0.7;
+}
+
+.piano-key--black.piano-key--active.velocity-level-2::after {
+  opacity: 0.8;
+}
+
+.piano-key--black.piano-key--active.velocity-level-3::after {
+  opacity: 0.85;
+}
+
+.piano-key--black.piano-key--active.velocity-level-4::after {
+  opacity: 0.95;
+}
+
+.piano-key--black.piano-key--active.velocity-level-5::after {
+  opacity: 1.0;
+}
+
+/* Enhanced glow for high velocity - handled by JavaScript animator */
+
+/* All transitions handled by JavaScript animator for better control */
+
+/* Improved mobile experience */
+@media (max-width: 768px) {
+  .piano-container::before,
+  .piano-container::after {
+    content: '';
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    width: 20px;
+    pointer-events: none;
+    z-index: 10;
+  }
+  
+  .piano-container::before {
+    left: 0;
+    background: linear-gradient(to right, rgba(255,255,255,0.9), transparent);
+  }
+  
+  .piano-container::after {
+    right: 0;
+    background: linear-gradient(to left, rgba(255,255,255,0.9), transparent);
+  }
+}
+
+/* Error boundary styles */
+.piano-error {
+  padding: 20px;
+  text-align: center;
+  color: #666;
+}
+
+@media (-webkit-min-device-pixel-ratio: 2), (min-resolution: 192dpi) {
+  .piano-key {
+    border-width: 0.5px;
+  }
+}
+
+/* Practice Mode Highlighting */
+.piano-key--practice-expected {
+  --highlight-color: #FFC107; /* Yellow for expected notes */
+  background: var(--highlight-color);
+  box-shadow: 0 0 10px var(--highlight-color);
+}
+
+.piano-key--practice-correct {
+  --highlight-color: #4CAF50; /* Green for correct notes */
+  background: var(--highlight-color);
+  box-shadow: inset 0 -3px 0 rgba(0, 0, 0, 0.2) !important; /* Clean depth */
+}
+
+.piano-key--practice-incorrect {
+  --highlight-color: #F44336; /* Red for incorrect notes */
+  background: var(--highlight-color);
+  box-shadow: inset 0 -3px 0 rgba(0, 0, 0, 0.2) !important; /* Clean depth */
+}
+
+/* Hand differentiation classes - Clean highlighting without glow */
+.piano-key--hand-left.piano-key--practice-expected {
+  --highlight-color: #4CAF50; /* Material green for left hand */
+  background: var(--highlight-color) !important;
+  box-shadow: inset 0 -3px 0 rgba(0, 0, 0, 0.2) !important; /* Subtle depth */
+}
+
+.piano-key--hand-right.piano-key--practice-expected {
+  --highlight-color: #2196F3; /* Material blue for right hand */
+  background: var(--highlight-color) !important;
+  box-shadow: inset 0 -3px 0 rgba(0, 0, 0, 0.2) !important; /* Subtle depth */
+}
+
+.piano-key--hand-left.piano-key--practice-correct {
+  --highlight-color: #66BB6A; /* Light green for left hand correct */
+  background: var(--highlight-color);
+  box-shadow: inset 0 -3px 0 rgba(0, 0, 0, 0.2) !important;
+}
+
+.piano-key--hand-right.piano-key--practice-correct {
+  --highlight-color: #42A5F5; /* Light blue for right hand correct */
+  background: var(--highlight-color);
+  box-shadow: inset 0 -3px 0 rgba(0, 0, 0, 0.2) !important;
+}
+
+.piano-key--hand-left.piano-key--practice-incorrect {
+  --highlight-color: #F44336; /* Red for both hands incorrect */
+  background: var(--highlight-color);
+  box-shadow: inset 0 -3px 0 rgba(0, 0, 0, 0.2) !important;
+}
+
+.piano-key--hand-right.piano-key--practice-incorrect {
+  --highlight-color: #F44336; /* Red for both hands incorrect */
+  background: var(--highlight-color);
+  box-shadow: inset 0 -3px 0 rgba(0, 0, 0, 0.2) !important;
+}
+
+/* Special treatment for black keys - clean outline approach */
+.piano-key--black.piano-key--practice-expected {
+  background: var(--highlight-color) !important;
+  outline: 3px solid white !important;
+  outline-offset: -3px; /* Inside the key boundary */
+  box-shadow: none !important;
+}
+
+/* Support for custom opacity and intensity */
+.piano-key--practice-expected,
+.piano-key--practice-correct,
+.piano-key--practice-incorrect {
+  opacity: var(--practice-opacity, 1);
+  filter: brightness(var(--practice-intensity, 1));
+}
+
+/* Smooth transitions for all highlight changes */
+.piano-key {
+  transition: background-color 0.2s ease, box-shadow 0.2s ease, opacity 0.2s ease, filter 0.2s ease;
+}
