@@ -175,8 +175,8 @@ function ensurePracticeBorderOverlay(containerEl: HTMLElement): HTMLDivElement {
       position: 'absolute',
       inset: '0',              // top:0 right:0 bottom:0 left:0
       pointerEvents: 'none',   // no hit-testing (clicks pass through)
-      overflow: 'hidden',      // clip any overflow
-      zIndex: '10',           // above OSMD content but below UI
+      overflow: 'visible',     // don't clip SVG elements
+      zIndex: '1000',         // above all OSMD content and UI elements
     });
     containerEl.appendChild(overlay);
   }
@@ -1414,11 +1414,28 @@ export const useOSMD = (
 
   // Build measure cache after OSMD render completes
   const buildMeasureCache = useCallback(() => {
+    console.log('🎹 [RED-BOX-DEBUG] buildMeasureCache called');
+    
     const osmdInstance = osmdRef.current;
-    if (!osmdInstance || !osmdInstance.graphic) return;
+    console.log('🎹 [RED-BOX-DEBUG] OSMD Instance check:', { 
+      hasInstance: !!osmdInstance, 
+      hasGraphic: !!osmdInstance?.graphic 
+    });
+    
+    if (!osmdInstance || !osmdInstance.graphic) {
+      console.log('🎹 [RED-BOX-DEBUG] EARLY EXIT: No OSMD instance or graphic');
+      return;
+    }
 
     const cache = new Map<number, Array<{ systemIndex: number; x: number; y: number; width: number; height: number }>>();
     const graphic = osmdInstance.graphic;
+    
+    console.log('🎹 [RED-BOX-DEBUG] OSMD Graphic properties available:', {
+      GraphicalMeasureParents: !!graphic.GraphicalMeasureParents,
+      VerticalGraphicalStaffEntryContainers: !!graphic.VerticalGraphicalStaffEntryContainers,
+      MeasureList: !!graphic.MeasureList,
+      MeasureListLength: graphic.MeasureList?.length
+    });
 
     // Access GraphicalMeasureParent objects (spans all staves)
     // Try different property names as OSMD API may vary
@@ -1427,41 +1444,83 @@ export const useOSMD = (
       graphic.VerticalGraphicalStaffEntryContainers ||
       graphic.MeasureList;
 
+    console.log('🎹 [RED-BOX-DEBUG] GraphicalMeasures selection:', {
+      selected: graphicalMeasures ? 'found' : 'none',
+      type: graphic.GraphicalMeasureParents ? 'GraphicalMeasureParents' : 
+            graphic.VerticalGraphicalStaffEntryContainers ? 'VerticalGraphicalStaffEntryContainers' :
+            graphic.MeasureList ? 'MeasureList' : 'unknown'
+    });
+
     if (!graphicalMeasures) {
+      console.log('🎹 [RED-BOX-DEBUG] EARLY EXIT: No graphicalMeasures found');
       return;
     }
 
     // If we have MeasureList, we need to iterate differently
     if (graphic.MeasureList && !graphic.GraphicalMeasureParents) {
+      console.log('🎹 [RED-BOX-DEBUG] Processing MeasureList');
+      
       // Fallback: Build from MeasureList
       const measureList = graphic.MeasureList;
       const isStaffFirst = measureList.length <= 4; // Assume max 4 staves
       
+      console.log('🎹 [RED-BOX-DEBUG] MeasureList analysis:', {
+        measureListLength: measureList.length,
+        isStaffFirst: isStaffFirst,
+        format: isStaffFirst ? '[staff][measure]' : '[measure][staff]'
+      });
+      
       if (isStaffFirst) {
+        console.log('🎹 [RED-BOX-DEBUG] Processing [staff][measure] format');
+        let processedMeasures = 0;
+        
         // [staff][measure] format
-        measureList.forEach((staffMeasures: any[]) => {
-          staffMeasures.forEach((measure: any) => {
-            if (!measure || !measure.parentSourceMeasure) return;
+        measureList.forEach((staffMeasures: any[], staffIndex: number) => {
+          console.log(`🎹 [RED-BOX-DEBUG] Processing staff ${staffIndex}, measures count: ${staffMeasures?.length}`);
+          
+          staffMeasures.forEach((measure: any, measureIndex: number) => {
+            if (!measure || !measure.parentSourceMeasure) {
+              console.log(`🎹 [RED-BOX-DEBUG] Skipping invalid measure at staff ${staffIndex}, measure ${measureIndex}`);
+              return;
+            }
             
             const measureNumber = measure.parentSourceMeasure.MeasureNumber;
             const systemId = measure.parentMusicSystem?.Id ?? 0;
             const bbox = measure.PositionAndShape;
             
-            if (!bbox) return;
+            console.log(`🎹 [RED-BOX-DEBUG] Processing measure ${measureNumber}:`, {
+              hasBbox: !!bbox,
+              systemId: systemId,
+              AbsolutePosition: bbox?.AbsolutePosition,
+              absolutePosition: bbox?.absolutePosition,
+              Size: bbox?.Size,
+              size: bbox?.size
+            });
+            
+            if (!bbox) {
+              console.log(`🎹 [RED-BOX-DEBUG] No bbox for measure ${measureNumber}, skipping`);
+              return;
+            }
             
             if (!cache.has(measureNumber)) {
               cache.set(measureNumber, []);
             }
             
-            cache.get(measureNumber)!.push({
+            const coords = {
               systemIndex: systemId,
               x: bbox.AbsolutePosition?.x ?? bbox.absolutePosition?.x ?? 0,
               y: bbox.AbsolutePosition?.y ?? bbox.absolutePosition?.y ?? 0,
               width: bbox.Size?.width ?? bbox.size?.width ?? 0,
               height: bbox.Size?.height ?? bbox.size?.height ?? 0
-            });
+            };
+            
+            console.log(`🎹 [RED-BOX-DEBUG] Adding coordinates for measure ${measureNumber}:`, coords);
+            cache.get(measureNumber)!.push(coords);
+            processedMeasures++;
           });
         });
+        
+        console.log(`🎹 [RED-BOX-DEBUG] Processed ${processedMeasures} measures in [staff][measure] format`);
       } else {
         // [measure][staff] format - transpose first
         const staffCount = measureList[0]?.length ?? 0;
@@ -1491,32 +1550,59 @@ export const useOSMD = (
         }
       }
     } else if (Array.isArray(graphicalMeasures)) {
+      console.log('🎹 [RED-BOX-DEBUG] Processing GraphicalMeasureParent array');
+      let processedMeasures = 0;
+      
       // Direct GraphicalMeasureParent array
-      graphicalMeasures.forEach((measureParent: any) => {
-        if (!measureParent?.sourceMeasure) return;
+      graphicalMeasures.forEach((measureParent: any, index: number) => {
+        if (!measureParent?.sourceMeasure) {
+          console.log(`🎹 [RED-BOX-DEBUG] Skipping invalid measureParent at index ${index}`);
+          return;
+        }
         
         const measureNumber = measureParent.sourceMeasure.MeasureNumber; // 1-based
         const systemIndex = measureParent.parentMusicSystem?.Id ?? 0;
         const bbox = measureParent.PositionAndShape;
         
-        if (!bbox) return;
+        console.log(`🎹 [RED-BOX-DEBUG] Processing measureParent ${measureNumber}:`, {
+          hasBbox: !!bbox,
+          systemIndex: systemIndex
+        });
+        
+        if (!bbox) {
+          console.log(`🎹 [RED-BOX-DEBUG] No bbox for measureParent ${measureNumber}, skipping`);
+          return;
+        }
         
         if (!cache.has(measureNumber)) {
           cache.set(measureNumber, []);
         }
         
-        cache.get(measureNumber)!.push({
+        const coords = {
           systemIndex,
           x: bbox.AbsolutePosition?.x ?? bbox.absolutePosition?.x ?? 0,
           y: bbox.AbsolutePosition?.y ?? bbox.absolutePosition?.y ?? 0,
           width: bbox.Size?.width ?? bbox.size?.width ?? 0,
           height: bbox.Size?.height ?? bbox.size?.height ?? 0
-        });
+        };
+        
+        console.log(`🎹 [RED-BOX-DEBUG] Adding coordinates for measureParent ${measureNumber}:`, coords);
+        cache.get(measureNumber)!.push(coords);
+        processedMeasures++;
       });
+      
+      console.log(`🎹 [RED-BOX-DEBUG] Processed ${processedMeasures} measures in GraphicalMeasureParent array`);
     }
 
     measureCacheRef.current = cache;
     cacheBuiltRef.current = true;
+    
+    console.log('🎹 [RED-BOX-DEBUG] buildMeasureCache COMPLETE:', {
+      cacheSize: cache.size,
+      cacheBuilt: true,
+      measureNumbers: Array.from(cache.keys()).sort((a, b) => a - b),
+      totalEntries: Array.from(cache.values()).reduce((total, entries) => total + entries.length, 0)
+    });
 
     if (process.env.NODE_ENV === 'development') {
       dlog('[Practice Range Cache] Built cache with', cache.size, 'measures');
@@ -1528,36 +1614,67 @@ export const useOSMD = (
   }, []);
 
   // Draw practice range border in layout-neutral overlay (ChatGPT-5 fix)
-  const drawPracticeRangeBorder = useCallback((opts?: { color?: string; strokeWidth?: number }) => {
+  const drawPracticeRangeBorder = useCallback((
+    opts?: { color?: string; strokeWidth?: number },
+    practiceState?: { customRangeActive: boolean; customStartMeasure: number; customEndMeasure: number }
+  ) => {
     const { color = '#ff0000', strokeWidth = 3 } = opts || {};
     
     const osmdInstance = osmdRef.current;
     const containerEl = containerRef.current;
+    
     if (!osmdInstance || !containerEl) return;
     
-    // Check if custom range is active
-    const practiceState = usePracticeStore.getState();
-    if (!practiceState.customRangeActive) return;
+    // Use passed state (current) instead of getState() (stale)
+    const state = practiceState || usePracticeStore.getState();
+    
+    if (!state.customRangeActive) return;
 
     // Get practice range state
-    const { customRangeActive, customStartMeasure, customEndMeasure } = practiceState;
+    const { customRangeActive, customStartMeasure, customEndMeasure } = state;
+    
+    console.log('🎹 [RED-BOX-DEBUG] drawPracticeRangeBorder - State validation:', {
+      customRangeActive,
+      customStartMeasure,
+      customEndMeasure,
+      validRange: customStartMeasure <= customEndMeasure
+    });
     
     if (!customRangeActive || !customStartMeasure || !customEndMeasure || customStartMeasure > customEndMeasure) {
+      console.log('🎹 [RED-BOX-DEBUG] EARLY EXIT: Invalid state or range');
       return;
     }
 
-    // Check if cache is built
+    // Check if cache is built - CRITICAL CHECK!
+    console.log('🎹 [RED-BOX-DEBUG] Cache status check:', {
+      cacheBuilt: cacheBuiltRef.current,
+      cacheSize: measureCacheRef.current.size,
+      cacheEmpty: measureCacheRef.current.size === 0
+    });
+    
     if (!cacheBuiltRef.current || measureCacheRef.current.size === 0) {
+      console.log('🎹 [RED-BOX-DEBUG] CRITICAL EARLY EXIT: Cache not built or empty!');
+      console.log('🎹 [RED-BOX-DEBUG] This is why red boxes are not appearing!');
       if (process.env.NODE_ENV === 'development') {
         console.warn('[Practice Range] Measure cache not built - cannot draw practice range');
       }
       return;
     }
+    
+    console.log('🎹 [RED-BOX-DEBUG] Cache check PASSED - Proceeding with red box rendering...');
 
     // ===== OVERLAY RENDERING (NO LAYOUT IMPACT) =====
+    console.log('🎹 [RED-BOX-DEBUG] Starting SVG overlay rendering...');
+    
     // Get or create the absolutely-positioned overlay
     const overlay = ensurePracticeBorderOverlay(containerEl);
     const overlaySvg = ensurePracticeBorderSvg(overlay);
+    
+    console.log('🎹 [RED-BOX-DEBUG] SVG overlay elements:', {
+      hasOverlay: !!overlay,
+      hasOverlaySvg: !!overlaySvg,
+      overlayParent: overlay?.parentElement?.tagName
+    });
     
     // Clear previous overlay content
     while (overlaySvg.firstChild) {
@@ -1568,8 +1685,15 @@ export const useOSMD = (
     const measuresBySystem = new Map<number, Array<{ x: number; y: number; width: number; height: number }>>();
     const minVisibleWidth = 8; // Minimum width in OSMD units
     
+    console.log(`🎹 [RED-BOX-DEBUG] Processing measures ${customStartMeasure} to ${customEndMeasure}`);
+    
     for (let m = customStartMeasure; m <= customEndMeasure; m++) {
       const bboxes = measureCacheRef.current.get(m);
+      console.log(`🎹 [RED-BOX-DEBUG] Measure ${m} cache lookup:`, {
+        found: !!bboxes,
+        bboxCount: bboxes?.length || 0
+      });
+      
       if (!bboxes) continue;
       
       for (const bbox of bboxes) {
@@ -1577,18 +1701,44 @@ export const useOSMD = (
           measuresBySystem.set(bbox.systemIndex, []);
         }
         measuresBySystem.get(bbox.systemIndex)!.push(bbox);
+        
+        console.log(`🎹 [RED-BOX-DEBUG] Added measure ${m} to system ${bbox.systemIndex}:`, bbox);
       }
     }
 
-    if (measuresBySystem.size === 0) return;
+    console.log('🎹 [RED-BOX-DEBUG] Measures grouped by system:', {
+      systemCount: measuresBySystem.size,
+      systems: Array.from(measuresBySystem.keys()),
+      totalMeasures: Array.from(measuresBySystem.values()).reduce((sum, measures) => sum + measures.length, 0)
+    });
+
+    if (measuresBySystem.size === 0) {
+      console.log('🎹 [RED-BOX-DEBUG] EARLY EXIT: No measures found in cache for range');
+      return;
+    }
 
     // Get OSMD SVG for coordinate calculations
     const backend = osmdInstance.drawer?.Backends?.[0];
-    if (!backend || typeof backend.getSvgElement !== 'function') return;
+    console.log('🎹 [RED-BOX-DEBUG] OSMD backend check:', {
+      hasBackend: !!backend,
+      hasGetSvgElement: !!(backend && typeof backend.getSvgElement === 'function')
+    });
+    
+    if (!backend || typeof backend.getSvgElement !== 'function') {
+      console.log('🎹 [RED-BOX-DEBUG] EARLY EXIT: No OSMD backend or getSvgElement function');
+      return;
+    }
     
     const osmdSvg = backend.getSvgElement() as SVGSVGElement;
     const osmdRect = osmdSvg.getBoundingClientRect();
     const containerRect = containerEl.getBoundingClientRect();
+    
+    console.log('🎹 [RED-BOX-DEBUG] Coordinate calculation:', {
+      osmdRect: { left: osmdRect.left, top: osmdRect.top, width: osmdRect.width, height: osmdRect.height },
+      containerRect: { left: containerRect.left, top: containerRect.top, width: containerRect.width, height: containerRect.height },
+      scrollLeft: containerEl.scrollLeft,
+      scrollTop: containerEl.scrollTop
+    });
     
     // Calculate offset between OSMD SVG and container
     const offsetX = osmdRect.left - containerRect.left + containerEl.scrollLeft;
@@ -1598,12 +1748,27 @@ export const useOSMD = (
     const currentZoom = osmdInstance.zoom || 1;
     const paddingInOSMDUnits = 0.4; // 4px at 100% zoom
     
+    console.log('🎹 [RED-BOX-DEBUG] Rendering parameters:', {
+      offsetX,
+      offsetY,
+      currentZoom,
+      paddingInOSMDUnits
+    });
+    
     // Create SVG namespace
     const ns = 'http://www.w3.org/2000/svg';
+    let rectanglesCreated = 0;
 
     // Draw rectangles in overlay (absolutely positioned, no layout impact)
     measuresBySystem.forEach((bboxes, systemIndex) => {
-      if (bboxes.length === 0) return;
+      if (bboxes.length === 0) {
+        console.log(`🎹 [RED-BOX-DEBUG] Skipping system ${systemIndex} - no bboxes`);
+        return;
+      }
+      
+      console.log(`🎹 [RED-BOX-DEBUG] Creating rectangle for system ${systemIndex} with ${bboxes.length} measures:`, {
+        rawBboxes: bboxes.map(b => ({ x: b.x, y: b.y, w: b.width, h: b.height }))
+      });
       
       // Sort by X position
       bboxes.sort((a, b) => a.x - b.x);
@@ -1620,13 +1785,26 @@ export const useOSMD = (
       let width = maxX - x;
       const height = maxY - y;
       
+      console.log(`🎹 [RED-BOX-DEBUG] Calculated OSMD coordinates for system ${systemIndex}:`, {
+        osmdBounds: { x, y, width, height, maxX, maxY },
+        firstBox: { x: firstBox.x, y: firstBox.y, w: firstBox.width, h: firstBox.height },
+        lastBox: { x: lastBox.x, y: lastBox.y, w: lastBox.width, h: lastBox.height },
+        minVisibleWidth,
+        paddingInOSMDUnits,
+        currentZoom
+      });
+      
       // Apply minimum width if needed
       if (width < minVisibleWidth) {
+        console.log(`🎹 [RED-BOX-DEBUG] Width ${width} < minVisible ${minVisibleWidth}, applying minimum width`);
         width = minVisibleWidth;
       }
 
       // Guard against invalid dimensions
-      if (width <= 0 || height <= 0) return;
+      if (width <= 0 || height <= 0) {
+        console.error(`🎹 [RED-BOX-DEBUG] Invalid dimensions for system ${systemIndex}:`, { width, height });
+        return;
+      }
 
       // Convert OSMD coordinates to overlay coordinates
       const overlayX = offsetX + (x - paddingInOSMDUnits) * 10 * currentZoom;
@@ -1634,8 +1812,23 @@ export const useOSMD = (
       const overlayWidth = (width + 2 * paddingInOSMDUnits) * 10 * currentZoom;
       const overlayHeight = (height + 2 * paddingInOSMDUnits) * 10 * currentZoom;
 
+      console.log(`🎹 [RED-BOX-DEBUG] Converted to overlay coordinates for system ${systemIndex}:`, {
+        overlay: { x: overlayX, y: overlayY, width: overlayWidth, height: overlayHeight },
+        conversion: {
+          offsetX, offsetY,
+          scaleFactors: { x: (x - paddingInOSMDUnits) * 10 * currentZoom, y: (y - paddingInOSMDUnits) * 10 * currentZoom }
+        }
+      });
+
       // Create rectangle in overlay (no layout impact!)
       const rect = document.createElementNS(ns, 'rect');
+      console.log(`🎹 [RED-BOX-DEBUG] Created SVG rect element:`, { 
+        element: rect,
+        tagName: rect.tagName,
+        namespace: rect.namespaceURI,
+        ns: ns
+      });
+      
       rect.setAttribute('class', 'practice-range-border');
       rect.setAttribute('x', overlayX.toString());
       rect.setAttribute('y', overlayY.toString());
@@ -1643,12 +1836,44 @@ export const useOSMD = (
       rect.setAttribute('height', overlayHeight.toString());
       rect.setAttribute('fill', 'none');
       rect.setAttribute('stroke', color);
-      rect.setAttribute('stroke-width', (strokeWidth / currentZoom).toString()); // Scale with zoom
+      rect.setAttribute('stroke-width', Math.max(1, strokeWidth / currentZoom).toString()); // Ensure minimum 1px stroke
       rect.setAttribute('vector-effect', 'non-scaling-stroke'); // Stable stroke under zoom
       rect.style.pointerEvents = 'none';
 
+      console.log(`🎹 [RED-BOX-DEBUG] Configured rect attributes for system ${systemIndex}:`, {
+        attributes: {
+          class: rect.getAttribute('class'),
+          x: rect.getAttribute('x'),
+          y: rect.getAttribute('y'),
+          width: rect.getAttribute('width'),
+          height: rect.getAttribute('height'),
+          fill: rect.getAttribute('fill'),
+          stroke: rect.getAttribute('stroke'),
+          strokeWidth: rect.getAttribute('stroke-width'),
+          vectorEffect: rect.getAttribute('vector-effect')
+        },
+        style: {
+          pointerEvents: rect.style.pointerEvents
+        }
+      });
+
       // Append to overlay SVG (NOT to OSMD content!)
-      overlaySvg.appendChild(rect);
+      try {
+        overlaySvg.appendChild(rect);
+        rectanglesCreated++;
+        console.log(`🎹 [RED-BOX-DEBUG] Successfully appended rect to overlaySvg for system ${systemIndex}. Total rectangles: ${rectanglesCreated}`);
+        
+        // Verify the rect was actually added to DOM
+        const addedRect = overlaySvg.querySelector(`rect.practice-range-border:nth-of-type(${rectanglesCreated})`);
+        console.log(`🎹 [RED-BOX-DEBUG] DOM verification for system ${systemIndex}:`, {
+          rectInDom: !!addedRect,
+          totalRectsInSvg: overlaySvg.querySelectorAll('rect.practice-range-border').length,
+          svgChildCount: overlaySvg.children.length,
+          boundingClientRect: addedRect ? addedRect.getBoundingClientRect() : null
+        });
+      } catch (error) {
+        console.error(`🎹 [RED-BOX-DEBUG] Failed to append rect for system ${systemIndex}:`, error);
+      }
     });
 
     if (process.env.NODE_ENV === 'development') {
@@ -3048,7 +3273,7 @@ export const useOSMD = (
   useEffect(() => {
     if (osmdRef.current) {
       withResizeObserverPaused(() => {
-        drawPracticeRangeBorder();
+        drawPracticeRangeBorder(undefined, { customRangeActive, customStartMeasure, customEndMeasure });
       });
     }
   }, [customRangeActive, customStartMeasure, customEndMeasure, drawPracticeRangeBorder]);

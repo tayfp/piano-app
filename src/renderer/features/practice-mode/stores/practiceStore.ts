@@ -242,14 +242,14 @@ export const usePracticeStore = create<PracticeStore>()(
       setCustomRange: (start, end) => {
         // Store-level validation to prevent invalid state
         if (start < 1 || end < start) {
-          console.warn('Invalid range provided to setCustomRange:', { start, end });
           return;
         }
-        console.log('[MeasureRangeDebug] setCustomRange called:', { start, end });
+        
         set(
           { 
             customStartMeasure: start, 
-            customEndMeasure: end 
+            customEndMeasure: end
+            // customRangeActive unchanged - manual control only via "Enable Range" button
           },
           false,
           'setCustomRange'
