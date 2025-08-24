@@ -12,7 +12,7 @@
  * - Backward compatible API
  */
 
-import { useEffect, useRef, useState, useCallback } from 'react';
+import React, { useEffect, useRef, useState, useCallback } from 'react';
 import { midiService, type MidiEvent as SingletonMidiEvent, type MidiDevice as SingletonMidiDevice } from '../services/MidiService';
 import type { MidiEvent, MidiDevice, NoteOnEvent, NoteOffEvent } from '../types/midi';
 import { useMidiStore, applyVelocityCurve, getActiveDeviceId } from '../stores/midiStore';
@@ -31,6 +31,7 @@ interface UseMidiReturn {
   error: string | null;
   pressedKeys: Set<number>;
   start: () => Promise<void>;
+  startWithAccess: (midiAccess: MIDIAccess) => Promise<void>;
   stop: () => void;
 }
 
@@ -230,30 +231,7 @@ export const useMidi = (options: UseMidiOptions = {}): UseMidiReturn => {
         
         await midiService.initialize();
         
-        // Set up subscriptions - CRITICAL: Check if not already subscribed
-        if (onMidiEvent && !subscriptionsRef.current.rawEvents) {
-          if (process.env.NODE_ENV === 'development') {
-            perfLogger.debug('[useMidi] Setting up raw event subscription in start');
-          }
-          const unsubscribeRaw = midiService.subscribeToRawEvents(currentCallbacksRef.current.enhancedCallback);
-          subscriptionsRef.current.rawEvents = unsubscribeRaw;
-        }
-        
-        if (onKeysChanged && !subscriptionsRef.current.keyChanges) {
-          if (process.env.NODE_ENV === 'development') {
-            perfLogger.debug('[useMidi] Setting up key state subscription in start');
-          }
-          const unsubscribeKeys = midiService.subscribeToKeyStateChanges(currentCallbacksRef.current.keyStateCallback);
-          subscriptionsRef.current.keyChanges = unsubscribeKeys;
-        }
-        
-        if (!subscriptionsRef.current.deviceChanges) {
-          if (process.env.NODE_ENV === 'development') {
-            perfLogger.debug('[useMidi] Setting up device change subscription in start');
-          }
-          const unsubscribeDevices = midiService.subscribeToDeviceChanges(currentCallbacksRef.current.deviceChangeCallback);
-          subscriptionsRef.current.deviceChanges = unsubscribeDevices;
-        }
+        await setupSubscriptions();
         
         setIsInitialized(true);
         if (process.env.NODE_ENV === 'development') {
@@ -275,20 +253,98 @@ export const useMidi = (options: UseMidiOptions = {}): UseMidiReturn => {
     await initPromise;
   }, [isInitialized, setStatus, setError, onMidiEvent, onKeysChanged]);
   
+  // Start with pre-granted MIDI access (preserves user gesture)
+  const startWithAccess = useCallback(async (midiAccess: MIDIAccess) => {
+    if (isInitialized) {
+      if (process.env.NODE_ENV === 'development') {
+        perfLogger.debug('useMidi: Service already initialized');
+      }
+      return;
+    }
+    
+    // If initialization is already in progress, await the existing promise
+    if (startPromiseRef.current) {
+      if (process.env.NODE_ENV === 'development') {
+        perfLogger.debug('useMidi: Awaiting existing initialization...');
+      }
+      await startPromiseRef.current;
+      return;
+    }
+    
+    // Create and store the initialization promise
+    const initPromise = (async () => {
+      try {
+        setStatus('initializing');
+        setError(null);
+        
+        await midiService.initializeWithAccess(midiAccess as any);
+        
+        await setupSubscriptions();
+        
+        setIsInitialized(true);
+        if (process.env.NODE_ENV === 'development') {
+          perfLogger.debug('useMidi: Start with access successful');
+        }
+        
+      } catch (err) {
+        const errorMessage = err instanceof Error ? err.message : 'Failed to start MIDI service with pre-granted access';
+        setError(errorMessage);
+        setStatus('error');
+        perfLogger.error('useMidi: Start with access error', err instanceof Error ? err : new Error(String(err)));
+      } finally {
+        // Clear the promise so future re-initializations can proceed
+        startPromiseRef.current = null;
+      }
+    })();
+    
+    startPromiseRef.current = initPromise;
+    await initPromise;
+  }, [isInitialized, setStatus, setError]);
+  
+  // Helper function to setup subscriptions (DRY principle)
+  const setupSubscriptions = useCallback(async () => {
+    // Set up subscriptions - CRITICAL: Check if not already subscribed
+    if (onMidiEvent && !subscriptionsRef.current.rawEvents) {
+      if (process.env.NODE_ENV === 'development') {
+        perfLogger.debug('[useMidi] Setting up raw event subscription');
+      }
+      const unsubscribeRaw = midiService.subscribeToRawEvents(currentCallbacksRef.current.enhancedCallback);
+      subscriptionsRef.current.rawEvents = unsubscribeRaw;
+    }
+    
+    if (onKeysChanged && !subscriptionsRef.current.keyChanges) {
+      if (process.env.NODE_ENV === 'development') {
+        perfLogger.debug('[useMidi] Setting up key state subscription');
+      }
+      const unsubscribeKeys = midiService.subscribeToKeyStateChanges(currentCallbacksRef.current.keyStateCallback);
+      subscriptionsRef.current.keyChanges = unsubscribeKeys;
+    }
+    
+    if (!subscriptionsRef.current.deviceChanges) {
+      if (process.env.NODE_ENV === 'development') {
+        perfLogger.debug('[useMidi] Setting up device change subscription');
+      }
+      const unsubscribeDevices = midiService.subscribeToDeviceChanges(currentCallbacksRef.current.deviceChangeCallback);
+      subscriptionsRef.current.deviceChanges = unsubscribeDevices;
+    }
+  }, [onMidiEvent, onKeysChanged]);
+  
   // Stop function - cleanup subscriptions but don't destroy singleton
   const stop = useCallback(() => {
-    // Clean up subscriptions
+    // Clean up subscriptions - this is safe to do anytime
     subscriptionsRef.current.rawEvents?.();
     subscriptionsRef.current.keyChanges?.();
     subscriptionsRef.current.deviceChanges?.();
     subscriptionsRef.current = {};
     
-    // Reset local state
-    setLocalDevices([]);
-    setPressedKeys(new Set());
-    setIsInitialized(false);
-    setStatus('initializing');
-    setError(null);
+    // Reset local state - batch these updates to minimize renders
+    React.startTransition(() => {
+      setLocalDevices([]);
+      setPressedKeys(new Set());
+      setIsInitialized(false);
+      setStatus('initializing');
+      setError(null);
+    });
     
     if (process.env.NODE_ENV === 'development') {
       perfLogger.debug('useMidi: Stopped (subscriptions cleaned up)');
@@ -302,6 +358,7 @@ export const useMidi = (options: UseMidiOptions = {}): UseMidiReturn => {
     error: storeError,
     pressedKeys,
     start,
+    startWithAccess,
     stop
   };
 };

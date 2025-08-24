@@ -22,6 +22,8 @@ interface MidiContextType {
   // Actions
   start: () => Promise<void>;
   stop: () => void;
+  requestMidiAccess: () => Promise<void>;
+  initializeWithAccess: (midiAccess: MIDIAccess) => Promise<void>;
   
   // Event subscription for practice mode
   subscribeMidiEvents: (callback: (event: MidiEvent) => void) => () => void;
@@ -69,35 +71,78 @@ export const MidiProvider: React.FC<MidiProviderProps> = ({
   // Track MIDI event subscribers for practice mode
   const midiEventSubscribersRef = useRef<Set<(event: MidiEvent) => void>>(new Set());
   
-  // Initialize MIDI system once when provider mounts
-  useEffect(() => {
-    const initializeMidi = async () => {
-      try {
-        perfLogger.debug('MidiProvider: Initializing MIDI system...');
-        await midi.start();
-        
-        // Validate persisted active device
-        const persistedDeviceId = getActiveDeviceId();
-        if (persistedDeviceId && midi.devices.length > 0) {
-          const deviceExists = midi.devices.some(d => d.id === persistedDeviceId);
-          if (!deviceExists) {
-            perfLogger.warn('MidiProvider: Persisted device no longer exists, clearing...');
-            // The store will handle clearing via setActiveDevice(null)
-          }
+  // Manual MIDI initialization requiring user gesture
+  const requestMidiAccess = useCallback(async () => {
+    try {
+      perfLogger.debug('MidiProvider: Requesting MIDI access (user gesture)...');
+      await midi.start();
+      
+      // Validate persisted active device
+      const persistedDeviceId = getActiveDeviceId();
+      if (persistedDeviceId && midi.devices.length > 0) {
+        const deviceExists = midi.devices.some(d => d.id === persistedDeviceId);
+        if (!deviceExists) {
+          perfLogger.warn('MidiProvider: Persisted device no longer exists, clearing...');
+          // The store will handle clearing via setActiveDevice(null)
         }
-      } catch (err) {
-        perfLogger.error('MidiProvider: Failed to initialize MIDI:', err instanceof Error ? err : new Error(String(err)));
       }
-    };
+    } catch (err) {
+      perfLogger.error('MidiProvider: Failed to initialize MIDI:', err instanceof Error ? err : new Error(String(err)));
+      throw err; // Re-throw to allow UI error handling
+    }
+  }, [midi]);
+  
+  // Initialize with pre-granted MIDI access (preserves user gesture)
+  const initializeWithAccess = useCallback(async (midiAccess: MIDIAccess) => {
+    console.log("🎯 [CONTEXT] initializeWithAccess called");
+    console.log("🎯 [CONTEXT] MidiAccess inputs:", midiAccess.inputs.size);
+    console.log("🎯 [CONTEXT] MidiAccess outputs:", midiAccess.outputs.size);
     
-    initializeMidi();
-    
-    // Cleanup on unmount
+    try {
+      perfLogger.debug('MidiProvider: Initializing with pre-granted MIDI access...');
+      
+      // Use the startWithAccess method from useMidi
+      if ('startWithAccess' in midi && typeof midi.startWithAccess === 'function') {
+        console.log("🎯 [CONTEXT] Calling midi.startWithAccess()...");
+        await midi.startWithAccess(midiAccess);
+        console.log("✅ [CONTEXT] midi.startWithAccess() succeeded");
+      } else {
+        console.error("❌ [CONTEXT] startWithAccess method not available in useMidi hook");
+        throw new Error('startWithAccess method not available in useMidi hook');
+      }
+      
+      // Validate persisted active device
+      const persistedDeviceId = getActiveDeviceId();
+      if (persistedDeviceId && midi.devices.length > 0) {
+        const deviceExists = midi.devices.some(d => d.id === persistedDeviceId);
+        if (!deviceExists) {
+          perfLogger.warn('MidiProvider: Persisted device no longer exists, clearing...');
+        }
+      }
+      
+      console.log("✅ [CONTEXT] initializeWithAccess completed successfully");
+    } catch (err) {
+      console.error("❌ [CONTEXT] initializeWithAccess failed:", err);
+      perfLogger.error('MidiProvider: Failed to initialize MIDI with pre-granted access:', err instanceof Error ? err : new Error(String(err)));
+      throw err;
+    }
+  }, [midi]);
+  
+  // Store stable reference to cleanup function to prevent infinite loops
+  const midiStopRef = useRef(midi.stop);
+  
+  // Update the ref when midi.stop changes (defensive programming)
+  useEffect(() => {
+    midiStopRef.current = midi.stop;
+  }, [midi.stop]);
+  
+  // Cleanup on unmount with stable reference - prevents infinite loop
+  useEffect(() => {
     return () => {
       perfLogger.debug('MidiProvider: Cleaning up...');
-      midi.stop();
+      midiStopRef.current(); // Use stable reference instead of midi.stop()
     };
-  }, []); // Empty deps - only run once on mount
+  }, []); // Empty dependency array prevents re-execution
   
   // REMOVED: Duplicate onKeysChanged call - useMidi already handles this in keyStateCallback
   // The pressedKeys tracking was causing duplicate logs since useMidi.ts line 121 
@@ -118,8 +163,10 @@ export const MidiProvider: React.FC<MidiProviderProps> = ({
   // Enhanced context value with subscription capability
   const contextValue = useMemo(() => ({
     ...midi,
-    subscribeMidiEvents
-  }), [midi, subscribeMidiEvents]);
+    subscribeMidiEvents,
+    requestMidiAccess,
+    initializeWithAccess
+  }), [midi, subscribeMidiEvents, requestMidiAccess, initializeWithAccess]);
   
   return (
     <MidiContext.Provider value={contextValue}>

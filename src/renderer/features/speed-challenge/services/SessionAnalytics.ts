@@ -9,114 +9,65 @@
  * - Note-specific difficulty analysis
  * 
  * Performance Target: <1ms per tracking call, <10ms for summary generation
+ * 
+ * Optimized: Extracted types, constants, utilities, and recommendation engine
+ * for better modularity and maintainability.
  */
 
 import { DifficultyLevel } from '../types';
 import { perfLogger } from '@/renderer/utils/performance-logger';
 import { speedChallengeDB, type NoteMetric } from './SpeedChallengeDatabase';
 
-// ============================================================================
-// TYPES AND INTERFACES
-// ============================================================================
+// Extracted modules for better organization
+import {
+  PatternPerformance,
+  PatternMetrics,
+  DifficultyMetrics,
+  PatternProgress,
+  NoteMetrics,
+  SessionSummary,
+  ExportedAnalytics,
+  PatternData
+} from '../types/analytics-types';
 
-/**
- * Performance data for a single pattern attempt
- */
-export interface PatternPerformance {
-  patternId: string;
-  difficulty: DifficultyLevel;
-  attemptTime: number;
-  correct: boolean;
-  midiNotes: number[];
-  timestamp: number;
-}
+// Re-export types for backward compatibility
+export type {
+  PatternPerformance,
+  PatternMetrics,
+  DifficultyMetrics,
+  PatternProgress,
+  NoteMetrics,
+  SessionSummary,
+  ExportedAnalytics
+};
 
-/**
- * Aggregated metrics for a specific pattern
- */
-export interface PatternMetrics {
-  patternId: string;
-  attempts: number;
-  correctAttempts: number;
-  accuracy: number;
-  averageTime: number;
-  bestTime: number;
-  worstTime: number;
-}
+import { 
+  ANALYTICS_THRESHOLDS, 
+  ANALYTICS_DEFAULTS, 
+  PERFORMANCE_THRESHOLDS 
+} from '../constants/analytics-constants';
 
-/**
- * Metrics grouped by difficulty level
- */
-export interface DifficultyMetrics {
-  difficulty: DifficultyLevel;
-  totalAttempts: number;
-  correctAttempts: number;
-  accuracy: number;
-  averageTime: number;
-}
+import { 
+  calculateVariation,
+  calculateAverage,
+  calculateAccuracy,
+  roundToDecimals,
+  calculateImprovement
+} from '../utils/statistics-utils';
 
-/**
- * Progress tracking for a pattern
- */
-export interface PatternProgress {
-  patternId: string;
-  improving: boolean;
-  plateau: boolean;
-  timeImprovement: number;
-  accuracyImprovement: number;
-}
+import {
+  identifyStrengths,
+  identifyWeaknesses,
+  generateRecommendations
+} from '../utils/recommendation-engine';
 
-/**
- * Note-specific performance metrics
- */
-export interface NoteMetrics {
-  [midiNote: number]: {
-    attempts: number;
-    correct: number;
-    accuracy: number;
-    averageTime: number;
-  };
-}
-
-/**
- * Comprehensive session summary
- */
-export interface SessionSummary {
-  sessionDuration: number;
-  totalPatterns: number;
-  uniquePatterns: number;
-  overallAccuracy: number;
-  averageResponseTime: number;
-  difficultyBreakdown: {
-    [key in DifficultyLevel]?: {
-      attempts: number;
-      accuracy: number;
-      averageTime: number;
-    };
-  };
-  strengths: DifficultyLevel[];
-  weaknesses: DifficultyLevel[];
-  recommendations: string[];
-}
-
-/**
- * Exported data format for persistence
- */
-export interface ExportedAnalytics {
-  version: string;
-  sessionStart: number;
-  patterns: Record<string, PatternData>;
-  noteMetrics: NoteMetrics;
-  difficultyMetrics: Record<DifficultyLevel, DifficultyMetrics>;
-}
-
-/**
- * Internal pattern data storage
- */
-interface PatternData {
-  attempts: PatternPerformance[];
-  metrics: PatternMetrics;
-}
+import {
+  transformNoteMetricsForPersistence,
+  findFastestTimeForNote,
+  extractPatternAttempts,
+  countCorrectPatterns,
+  extractPatternTimes
+} from '../utils/data-transformers';
 
 // ============================================================================
 // SESSION ANALYTICS CLASS
@@ -129,10 +80,10 @@ export class SessionAnalytics {
   private noteMetrics: NoteMetrics = {};
   private difficultyMetrics: Map<DifficultyLevel, DifficultyMetrics> = new Map();
   
-  // Performance thresholds
-  private readonly accuracyThreshold = 0.7; // 70% accuracy for "good" performance
-  private readonly slowResponseThreshold = 2000; // 2 seconds is considered slow
-  private readonly plateauThreshold = 0.1; // 10% variation indicates plateau
+  // Performance thresholds (now using extracted constants)
+  private readonly accuracyThreshold = ANALYTICS_THRESHOLDS.ACCURACY_THRESHOLD;
+  private readonly slowResponseThreshold = ANALYTICS_THRESHOLDS.SLOW_RESPONSE_THRESHOLD;
+  private readonly plateauThreshold = ANALYTICS_THRESHOLDS.PLATEAU_THRESHOLD;
 
   constructor() {
     this.sessionStart = Date.now();
@@ -171,7 +122,7 @@ export class SessionAnalytics {
     this.updateDifficultyMetrics(performance);
 
     const trackingTime = Date.now() - perfStart;
-    if (trackingTime > 1) {
+    if (trackingTime > PERFORMANCE_THRESHOLDS.MAX_TRACKING_TIME) {
       perfLogger.warn('Slow analytics tracking', { trackingTime, patternId: performance.patternId });
     }
   }
@@ -322,15 +273,15 @@ export class SessionAnalytics {
       }
     });
 
-    // Identify strengths and weaknesses
-    const strengths = this.identifyStrengths();
-    const weaknesses = this.identifyWeaknesses();
+    // Identify strengths and weaknesses (using extracted utilities)
+    const strengths = identifyStrengths(this.difficultyMetrics);
+    const weaknesses = identifyWeaknesses(this.difficultyMetrics);
 
-    // Generate recommendations
-    const recommendations = this.generateRecommendations(strengths, weaknesses, overallAccuracy);
+    // Generate recommendations (using extracted recommendation engine)
+    const recommendations = generateRecommendations(strengths, weaknesses, overallAccuracy, this.difficultyMetrics);
 
     const summaryTime = performance.now() - perfStart;
-    if (summaryTime > 10) {
+    if (summaryTime > PERFORMANCE_THRESHOLDS.MAX_SUMMARY_GENERATION_TIME) {
       perfLogger.warn('Slow summary generation', { summaryTime });
     }
 
@@ -347,80 +298,6 @@ export class SessionAnalytics {
     };
   }
 
-  /**
-   * Identify difficulty levels where user excels
-   */
-  private identifyStrengths(): DifficultyLevel[] {
-    const strengths: DifficultyLevel[] = [];
-    
-    this.difficultyMetrics.forEach((metrics, difficulty) => {
-      if (metrics.totalAttempts >= 5 && metrics.accuracy >= this.accuracyThreshold) {
-        strengths.push(difficulty);
-      }
-    });
-
-    return strengths;
-  }
-
-  /**
-   * Identify difficulty levels that need improvement
-   */
-  private identifyWeaknesses(): DifficultyLevel[] {
-    const weaknesses: DifficultyLevel[] = [];
-    
-    this.difficultyMetrics.forEach((metrics, difficulty) => {
-      if (metrics.totalAttempts >= 5 && metrics.accuracy < 0.5) {
-        weaknesses.push(difficulty);
-      }
-    });
-
-    return weaknesses;
-  }
-
-  /**
-   * Generate actionable recommendations
-   */
-  private generateRecommendations(
-    strengths: DifficultyLevel[], 
-    weaknesses: DifficultyLevel[], 
-    overallAccuracy: number
-  ): string[] {
-    const recommendations: string[] = [];
-
-    // Recommendations based on weaknesses
-    if (weaknesses.includes('basic_triads')) {
-      recommendations.push('Practice triads at a slower tempo to improve accuracy');
-      recommendations.push('Focus on individual chord tones before attempting full triads');
-    }
-
-    if (weaknesses.includes('intervals')) {
-      recommendations.push('Practice intervals with visual cues enabled');
-      recommendations.push('Start with smaller intervals (3rds and 4ths) before larger ones');
-    }
-
-    if (weaknesses.includes('single_notes')) {
-      recommendations.push('Slow down and focus on accuracy over speed');
-      recommendations.push('Practice with a metronome to improve timing');
-    }
-
-    // General recommendations
-    if (overallAccuracy < 0.5) {
-      recommendations.push('Reduce tempo to improve accuracy');
-      recommendations.push('Consider practicing with easier patterns first');
-    }
-
-    if (strengths.length > 0 && weaknesses.length === 0) {
-      recommendations.push(`Great job on ${strengths.join(', ')}! Consider increasing difficulty`);
-    }
-
-    // Detect if user is ready for next level
-    const singleNotesMetrics = this.difficultyMetrics.get('single_notes');
-    if (singleNotesMetrics && singleNotesMetrics.accuracy > 0.9 && singleNotesMetrics.totalAttempts > 10) {
-      recommendations.push('Excellent single note accuracy! Try moving to intervals');
-    }
-
-    return recommendations;
-  }
 
   /**
    * Get patterns with poor performance
@@ -495,7 +372,7 @@ export class SessionAnalytics {
     // Use last 5 attempts or all recent attempts if less than 5
     const lastAttempts = attempts.slice(-5);
     const lastTimes = lastAttempts.map(a => a.attemptTime);
-    const timeVariation = this.calculateVariation(lastTimes);
+    const timeVariation = calculateVariation(lastTimes);
     
     // For alternating patterns (like 0,1,0,1), check overall accuracy consistency
     const overallAccuracy = attempts.filter(a => a.correct).length / attempts.length;
@@ -516,23 +393,6 @@ export class SessionAnalytics {
     };
   }
 
-  /**
-   * Calculate coefficient of variation for plateau detection
-   */
-  private calculateVariation(values: number[]): number {
-    if (values.length < 2) return 0;
-
-    const mean = values.reduce((sum, v) => sum + v, 0) / values.length;
-    const variance = values.reduce((sum, v) => sum + Math.pow(v - mean, 2), 0) / (values.length - 1); // Sample variance
-    const stdDev = Math.sqrt(variance);
-
-    // Coefficient of variation
-    const cv = mean > 0 ? stdDev / mean : 0;
-    
-    // For times around 1500ms with ±50ms variation, CV should be around 0.02-0.03
-    // which is less than our threshold of 0.1
-    return cv;
-  }
 
   /**
    * Get note-specific metrics
@@ -620,19 +480,11 @@ export class SessionAnalytics {
    */
   public async persistSession(sessionId?: string): Promise<void> {
     const summary = this.getSessionSummary();
-    const noteMetrics = this.calculateNoteMetricsForPersistence();
-    const patternMetrics = this.extractPatternAttempts();
+    const noteMetrics = transformNoteMetricsForPersistence(this.noteMetrics, this.patterns);
+    const patternMetrics = extractPatternAttempts(this.patterns);
     
-    // Get pattern completion times from patterns map
-    const patternTimes: number[] = [];
-    if (this.patterns && this.patterns.size > 0) {
-      this.patterns.forEach((patternData) => {
-        // Check if metrics exist and have valid average time
-        if (patternData && patternData.metrics && patternData.metrics.averageTime > 0) {
-          patternTimes.push(patternData.metrics.averageTime);
-        }
-      });
-    }
+    // Get pattern completion times using extracted utility
+    const patternTimes = extractPatternTimes(this.patterns);
     
     try {
       await speedChallengeDB.saveOrUpdateSession({
@@ -640,7 +492,7 @@ export class SessionAnalytics {
         timestamp: Date.now(),
         duration: Date.now() - this.sessionStart,
         totalPatterns: summary.totalPatterns,
-        correctPatterns: this.countCorrectPatterns(),
+        correctPatterns: countCorrectPatterns(this.patterns),
         accuracy: summary.overallAccuracy,
         averageResponseTime: summary.averageResponseTime,
         noteMetrics,
@@ -659,95 +511,5 @@ export class SessionAnalytics {
     } catch (error) {
       perfLogger.error('Failed to persist session', error);
     }
-  }
-
-  /**
-   * Calculate note metrics for database persistence
-   */
-  private calculateNoteMetricsForPersistence(): Record<number, NoteMetric> {
-    const noteMetrics: Record<number, NoteMetric> = {};
-    
-    Object.entries(this.noteMetrics).forEach(([note, metrics]) => {
-      const noteNum = Number(note);
-      noteMetrics[noteNum] = {
-        note: noteNum,
-        attempts: metrics.attempts,
-        correct: metrics.correct,
-        averageTime: metrics.averageTime,
-        fastestTime: this.findFastestTimeForNote(noteNum)
-      };
-    });
-    
-    return noteMetrics;
-  }
-
-  /**
-   * Find the fastest response time for a specific note
-   */
-  private findFastestTimeForNote(note: number): number {
-    let fastestTime = Infinity;
-    
-    this.patterns.forEach(patternData => {
-      patternData.attempts.forEach(attempt => {
-        if (attempt.midiNotes.includes(note) && attempt.correct) {
-          fastestTime = Math.min(fastestTime, attempt.attemptTime);
-        }
-      });
-    });
-    
-    return fastestTime === Infinity ? 0 : fastestTime;
-  }
-
-  /**
-   * Extract pattern attempts for persistence
-   */
-  private extractPatternAttempts(): Array<{
-    patternId: string;
-    timestamp: number;
-    responseTime: number;
-    correct: boolean;
-    expectedNotes: number[];
-    playedNote: number;
-    difficulty: string;
-  }> {
-    const attempts: Array<{
-      patternId: string;
-      timestamp: number;
-      responseTime: number;
-      correct: boolean;
-      expectedNotes: number[];
-      playedNote: number;
-      difficulty: string;
-    }> = [];
-    
-    this.patterns.forEach((patternData, patternId) => {
-      patternData.attempts.forEach(attempt => {
-        // For each attempt, create a simplified record
-        attempts.push({
-          patternId,
-          timestamp: attempt.timestamp,
-          responseTime: attempt.attemptTime,
-          correct: attempt.correct,
-          expectedNotes: attempt.midiNotes,
-          playedNote: attempt.midiNotes[0] || 0, // Use first note as representative
-          difficulty: attempt.difficulty
-        });
-      });
-    });
-    
-    return attempts;
-  }
-
-  /**
-   * Count total number of correct patterns
-   */
-  private countCorrectPatterns(): number {
-    let correctCount = 0;
-    
-    this.patterns.forEach(patternData => {
-      correctCount += patternData.attempts.filter(a => a.correct).length;
-    });
-    
-    return correctCount;
   }
 }

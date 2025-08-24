@@ -30,9 +30,13 @@ export class LightweightLatencyMonitor {
       if (measure) {
         this.recordMeasurement(name, measure.duration);
         
-        // Warn if approaching latency budget
-        if (name.includes('midi') && measure.duration > 15) {
-          perfLogger.warn(`[PERF] ${name} took ${measure.duration.toFixed(2)}ms - approaching 20ms budget`);
+        // Critical performance monitoring for MIDI latency
+        if (name.includes('midi')) {
+          if (measure.duration > 20) {
+            perfLogger.error(`[CRITICAL] ${name} took ${measure.duration.toFixed(2)}ms - EXCEEDS 20ms budget!`);
+          } else if (measure.duration > 15) {
+            perfLogger.warn(`[PERF] ${name} took ${measure.duration.toFixed(2)}ms - approaching 20ms budget`);
+          }
         }
       }
       

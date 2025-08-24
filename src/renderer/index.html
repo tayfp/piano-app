@@ -3,15 +3,8 @@
   <head>
     <meta charset="UTF-8" />
     <title>Urtext Piano</title>
-    <!-- CSP for Phase 1 (MVP) - unsafe-eval required for OSMD library -->
-    <meta http-equiv="Content-Security-Policy" 
-          content="default-src 'self'; 
-                   script-src 'self' 'unsafe-eval' 'unsafe-inline'; 
-                   style-src 'self' 'unsafe-inline'; 
-                   img-src 'self' data: blob:;
-                   media-src 'self' blob:;
-                   connect-src 'self' ws: wss:;">
-    <!-- TODO: Remove unsafe-eval in Phase 2 by using webview sandboxing -->
+    <!-- CSP now handled by Electron window manager for better security control -->
+    <!-- MIDI permissions and unsafe-eval for OSMD managed via main process CSP headers -->
     <link rel="stylesheet" href="./styles/themes.css">
     <style>
       body {

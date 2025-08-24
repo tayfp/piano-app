@@ -53,27 +53,66 @@ function sendTelemetry(type, payload = {}) {
     ...payload
   });
 }
+function extractTempoData(content) {
+  try {
+    import_performanceLogger.performanceLogger.mark("tempo-extract-start");
+    const tempoExtractor = new import_musicXMLTempoExtractor.MusicXMLTempoExtractor();
+    const tempoData = tempoExtractor.extract(content);
+    import_performanceLogger.performanceLogger.mark("tempo-extract-end");
+    const extractTime = import_performanceLogger.performanceLogger.measure("tempo-extract-start", "tempo-extract-end");
+    sendTelemetry("tempo:extracted", {
+      count: tempoData.length,
+      extractTime,
+      hasPositions: tempoData.some((t) => t.offset !== void 0)
+    });
+    return tempoData;
+  } catch (error) {
+    return void 0;
+  }
+}
+async function readAndValidateFile(normalizedPath) {
+  const ext = path.extname(normalizedPath).toLowerCase();
+  let content;
+  import_performanceLogger.performanceLogger.mark("read-start");
+  if (ext === ".mxl") {
+    content = await processMXLFile(normalizedPath);
+  } else if ([".xml", ".musicxml"].includes(ext)) {
+    content = await fs.readFile(normalizedPath, "utf-8");
+  } else {
+    throw new Error(`Unsupported file type: ${ext}`);
+  }
+  import_performanceLogger.performanceLogger.mark("read-end");
+  const readTime = import_performanceLogger.performanceLogger.measure("read-start", "read-end");
+  import_performanceLogger.performanceLogger.mark("validate-start");
+  validateXMLContent(content);
+  import_performanceLogger.performanceLogger.mark("validate-end");
+  return { content, readTime };
+}
+async function validateAndStatFile(filePath) {
+  const normalizedPath = path.normalize(filePath);
+  if (!path.isAbsolute(normalizedPath)) {
+    throw new Error("Invalid file path");
+  }
+  import_performanceLogger.performanceLogger.mark("stat-start");
+  const stats = await fs.stat(normalizedPath);
+  import_performanceLogger.performanceLogger.mark("stat-end");
+  const MAX_FILE_SIZE = 100 * 1024 * 1024;
+  if (stats.size > MAX_FILE_SIZE) {
+    throw new Error(`File too large: ${(stats.size / 1024 / 1024).toFixed(2)}MB (max: 100MB)`);
+  }
+  return { normalizedPath, stats };
+}
 async function processFile() {
   var _a, _b;
   const { filePath, jobId } = import_worker_threads.workerData;
   try {
     import_performanceLogger.performanceLogger.mark("worker-start");
     sendTelemetry("worker:start", { filePath: path.basename(filePath) });
-    const normalizedPath = path.normalize(filePath);
-    if (!path.isAbsolute(normalizedPath)) {
-      throw new Error("Invalid file path");
-    }
-    import_performanceLogger.performanceLogger.mark("stat-start");
-    const stats = await fs.stat(normalizedPath);
-    import_performanceLogger.performanceLogger.mark("stat-end");
+    const { normalizedPath, stats } = await validateAndStatFile(filePath);
     sendTelemetry("file:stats", {
       size: stats.size,
       sizeMB: (stats.size / 1024 / 1024).toFixed(2)
     });
-    const MAX_FILE_SIZE = 100 * 1024 * 1024;
-    if (stats.size > MAX_FILE_SIZE) {
-      throw new Error(`File too large: ${(stats.size / 1024 / 1024).toFixed(2)}MB (max: 100MB)`);
-    }
     const STREAMING_THRESHOLD = 1024 * 1024;
     if (stats.size > STREAMING_THRESHOLD) {
       sendTelemetry("processing:mode", { mode: "streaming", threshold: STREAMING_THRESHOLD });
@@ -81,52 +120,8 @@ async function processFile() {
       return;
     }
     sendTelemetry("processing:mode", { mode: "synchronous", threshold: STREAMING_THRESHOLD });
-    const ext = path.extname(normalizedPath).toLowerCase();
-    let content;
-    import_performanceLogger.performanceLogger.mark("read-start");
-    if (ext === ".mxl") {
-      content = await processMXLFile(normalizedPath);
-    } else if ([".xml", ".musicxml"].includes(ext)) {
-      content = await fs.readFile(normalizedPath, "utf-8");
-    } else {
-      throw new Error(`Unsupported file type: ${ext}`);
-    }
-    import_performanceLogger.performanceLogger.mark("read-end");
-    const readTime = import_performanceLogger.performanceLogger.measure("read-start", "read-end");
-    import_performanceLogger.performanceLogger.mark("validate-start");
-    validateXMLContent(content);
-    import_performanceLogger.performanceLogger.mark("validate-end");
-    let tempoData;
-    if ([".xml", ".musicxml"].includes(ext)) {
-      try {
-        import_performanceLogger.performanceLogger.mark("tempo-extract-start");
-        const tempoExtractor = new import_musicXMLTempoExtractor.MusicXMLTempoExtractor();
-        tempoData = tempoExtractor.extract(content);
-        import_performanceLogger.performanceLogger.mark("tempo-extract-end");
-        const extractTime = import_performanceLogger.performanceLogger.measure("tempo-extract-start", "tempo-extract-end");
-        sendTelemetry("tempo:extracted", {
-          count: tempoData.length,
-          extractTime,
-          hasPositions: tempoData.some((t) => t.offset !== void 0)
-        });
-      } catch (error) {
-      }
-    } else if (ext === ".mxl") {
-      try {
-        import_performanceLogger.performanceLogger.mark("tempo-extract-start");
-        const tempoExtractor = new import_musicXMLTempoExtractor.MusicXMLTempoExtractor();
-        tempoData = tempoExtractor.extract(content);
-        import_performanceLogger.performanceLogger.mark("tempo-extract-end");
-        const extractTime = import_performanceLogger.performanceLogger.measure("tempo-extract-start", "tempo-extract-end");
-        sendTelemetry("tempo:extracted", {
-          count: tempoData.length,
-          extractTime,
-          hasPositions: tempoData.some((t) => t.offset !== void 0)
-        });
-      } catch (error) {
-      }
-    } else {
-    }
+    const { content, readTime } = await readAndValidateFile(normalizedPath);
+    const tempoData = extractTempoData(content);
     import_performanceLogger.performanceLogger.mark("worker-end");
     const totalTime = import_performanceLogger.performanceLogger.measure("worker-start", "worker-end");
     sendTelemetry("worker:complete", {
@@ -141,7 +136,6 @@ async function processFile() {
       fileName: path.basename(normalizedPath),
       fileSize: stats.size,
       tempoData,
-      // Add tempo data to result
       performance: {
         readTime,
         parseTime: import_performanceLogger.performanceLogger.measure("validate-start", "validate-end"),
@@ -294,32 +288,8 @@ async function processFileWithStreaming(filePath, jobId, fileSize) {
 async function processFileWithParams(filePath, jobId) {
   try {
     import_performanceLogger.performanceLogger.mark("worker-start");
-    const normalizedPath = path.normalize(filePath);
-    if (!path.isAbsolute(normalizedPath)) {
-      throw new Error("Invalid file path");
-    }
-    import_performanceLogger.performanceLogger.mark("stat-start");
-    const stats = await fs.stat(normalizedPath);
-    import_performanceLogger.performanceLogger.mark("stat-end");
-    const MAX_FILE_SIZE = 100 * 1024 * 1024;
-    if (stats.size > MAX_FILE_SIZE) {
-      throw new Error(`File too large: ${(stats.size / 1024 / 1024).toFixed(2)}MB (max: 100MB)`);
-    }
-    const ext = path.extname(normalizedPath).toLowerCase();
-    let content;
-    import_performanceLogger.performanceLogger.mark("read-start");
-    if (ext === ".mxl") {
-      content = await processMXLFile(normalizedPath);
-    } else if ([".xml", ".musicxml"].includes(ext)) {
-      content = await fs.readFile(normalizedPath, "utf-8");
-    } else {
-      throw new Error(`Unsupported file type: ${ext}`);
-    }
-    import_performanceLogger.performanceLogger.mark("read-end");
-    const readTime = import_performanceLogger.performanceLogger.measure("read-start", "read-end");
-    import_performanceLogger.performanceLogger.mark("validate-start");
-    validateXMLContent(content);
-    import_performanceLogger.performanceLogger.mark("validate-end");
+    const { normalizedPath, stats } = await validateAndStatFile(filePath);
+    const { content, readTime } = await readAndValidateFile(normalizedPath);
     import_performanceLogger.performanceLogger.mark("worker-end");
     const totalTime = import_performanceLogger.performanceLogger.measure("worker-start", "worker-end");
     return {
@@ -345,7 +315,7 @@ async function processFileWithParams(filePath, jobId) {
 if (import_worker_threads.parentPort) {
   processFile().catch((error) => {
     var _a, _b;
-    import_performanceLogger.performanceLogger.error("Worker error:", error);
+    console.error("Worker error:", error);
     (_b = import_worker_threads.parentPort) == null ? void 0 : _b.postMessage({
       success: false,
       jobId: (_a = import_worker_threads.workerData) == null ? void 0 : _a.jobId,

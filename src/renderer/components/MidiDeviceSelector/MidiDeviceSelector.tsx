@@ -12,8 +12,26 @@ import { useMidiStore } from '@/renderer/stores/midiStore';
 import './MidiDeviceSelector.css';
 
 export const MidiDeviceSelector: React.FC = () => {
-  const { devices, activeDevice, selectDevice, error, initializeMidi } = useMidiDevices();
+  const { devices, activeDevice, selectDevice, error, initializeMidi, initializeMidiWithGesture } = useMidiDevices();
   const { status } = useMidiStore();
+  
+  // Handle MIDI initialization with proper error handling
+  const handleMidiInitialization = async () => {
+    console.log("🔘 [BUTTON] User clicked 'Connect MIDI Device'");
+    console.log("🔘 [BUTTON] Event timestamp:", Date.now());
+    console.log("🔘 [BUTTON] User agent:", navigator.userAgent);
+    console.log("🔘 [BUTTON] Platform:", navigator.platform);
+    
+    try {
+      console.log("🔘 [BUTTON] Calling initializeMidiWithGesture()...");
+      await initializeMidiWithGesture();
+      console.log("✅ [BUTTON] initializeMidiWithGesture() succeeded");
+    } catch (err) {
+      console.error("❌ [BUTTON] initializeMidiWithGesture() failed:", err);
+      // Error is already handled in the hook, just log for debugging
+      console.debug('MIDI initialization completed with platform limitation');
+    }
+  };
   
   // Error state - highest priority
   if (error) {
@@ -36,9 +54,10 @@ export const MidiDeviceSelector: React.FC = () => {
     return (
       <div className="midi-not-initialized">
         <button 
-          onClick={initializeMidi} 
+          onClick={handleMidiInitialization} 
           className="midi-initialize-button"
           title="Click to connect to MIDI devices"
+          data-testid="midi-initialize-button"
         >
            Connect MIDI Device
         </button>

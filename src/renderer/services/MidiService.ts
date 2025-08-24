@@ -133,6 +133,23 @@ export class MidiService {
     this.initializationPromise = this.performInitialization();
     return this.initializationPromise;
   }
+  
+  /**
+   * Initialize with pre-granted MIDI access (preserves user gesture)
+   * This method bypasses the requestMIDIAccess call and uses provided access
+   */
+  public async initializeWithAccess(midiAccess: MIDIAccess): Promise<void> {
+    if (this.isInitialized) {
+      return;
+    }
+    
+    if (this.initializationPromise) {
+      return this.initializationPromise;
+    }
+    
+    this.initializationPromise = this.performInitializationWithAccess(midiAccess);
+    return this.initializationPromise;
+  }
 
   private async performInitialization(): Promise<void> {
     try {
@@ -155,25 +172,78 @@ export class MidiService {
       
       try {
         this.midiAccess = await Promise.race([midiPromise, timeoutPromise]);
+      } catch (midiError: unknown) {
+        // Clear timeout on error
+        clearTimeout(timeoutId!);
+        
+        // Enhanced error handling for permission issues
+        if (midiError instanceof Error) {
+          // Check for permission-specific errors
+          if (midiError.name === 'NotAllowedError' || midiError.message.includes('not allowed')) {
+            throw new Error('MIDI access denied. Please ensure you clicked a button to enable MIDI and try again.');
+          }
+          if (midiError.name === 'SecurityError') {
+            throw new Error('MIDI access blocked by browser security policy. Please check Content Security Policy settings.');
+          }
+          if (midiError.message.includes('timeout')) {
+            throw new Error('MIDI device connection timed out. Please check your device is connected and try again.');
+          }
+        }
+        
+        // Re-throw original error if not permission-related
+        throw midiError;
       } finally {
+        // Ensure timeout is always cleared
         clearTimeout(timeoutId!);
       }
       
-      // Set up device change listener
-      this.midiAccess.onstatechange = (event: WebMidi.MIDIConnectionEvent) => {
-        this.handleDeviceStateChange(event);
-      };
+      this.finalizeMidiSetup();
       
-      // Initialize existing devices
-      this.setupExistingDevices();
-      
-      this.isInitialized = true;
-      logger.midi('Initialized successfully');
     } catch (err: unknown) {
       const error = err instanceof Error ? err : new Error(String(err));
       perfLogger.error('MidiService: Failed to initialize MIDI access:', error);
       throw err;
     }
+  }
+  
+  /**
+   * Initialize with pre-granted MIDI access - PRESERVES USER GESTURE
+   * This method skips requestMIDIAccess and uses provided access object
+   */
+  private async performInitializationWithAccess(midiAccess: MIDIAccess): Promise<void> {
+    try {
+      logger.midi('Initializing with pre-granted MIDI access...');
+      
+      // Use the provided MIDI access (cast to our internal type)
+      this.midiAccess = midiAccess as WebMidi.MIDIAccess;
+      
+      this.finalizeMidiSetup();
+      
+    } catch (err: unknown) {
+      const error = err instanceof Error ? err : new Error(String(err));
+      perfLogger.error('MidiService: Failed to initialize with pre-granted access:', error);
+      throw err;
+    }
+  }
+  
+  /**
+   * Common setup logic for both initialization methods
+   */
+  private finalizeMidiSetup(): void {
+    if (!this.midiAccess) {
+      throw new Error('MIDI access not available during setup');
+    }
+    
+    // Set up device change listener
+    this.midiAccess.onstatechange = (event: WebMidi.MIDIConnectionEvent) => {
+      this.handleDeviceStateChange(event);
+    };
+    
+    // Initialize existing devices
+    this.setupExistingDevices();
+    
+    this.isInitialized = true;
+    logger.midi('Initialized successfully');
   }
 
   private setupExistingDevices(): void {
